@@ -61,11 +61,14 @@ client.login(DISCORD_TOKEN);
 client.on("messageCreate", msg => {
   if (msg.channel.id !== CHANNEL_ID) return;
 
-  if (
-    !msg.content.startsWith("APPEAL_") &&
-    !msg.content.startsWith("REPORT_") &&
-    !msg.content.startsWith("PUNISH|")
-  ) return;
+ if (
+  !msg.content.startsWith("APPEAL_") &&
+  !msg.content.startsWith("REPORT_") &&
+  !msg.content.startsWith("PUNISH|") &&
+  !msg.content.startsWith("FLEX|") &&
+  !msg.content.startsWith("REPLAY|")
+) return;
+
 
   const payload = parseEvent(msg.content);
   console.log("➡️ Forwarding to MC:", payload);
