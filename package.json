@@ -1,0 +1,22 @@
+{
+  "name": "punish-leaderboard-bot",
+  "version": "1.0.0",
+  "description": "Discord bot + appeal scraper + MC SSE backend",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "postinstall": "npx playwright install chromium"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "discord.js": "^14.25.1",
+    "dotenv": "^17.2.3",
+    "express": "^4.19.2",
+    "https-proxy-agent": "^7.0.6",
+    "node-fetch": "^2.7.0",
+    "playwright": "^1.57.0",
+    "xml2js": "^0.6.2"
+  }
+}
