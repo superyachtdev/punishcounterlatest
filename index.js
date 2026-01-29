@@ -156,30 +156,48 @@ app.get("/leaderboard", async (req, res) => {
       lastId = fetched.last().id;
     }
 
-    const counts = {};
+    const stats = {};
+
     for (const msg of messages) {
       if (!msg.content.startsWith("PUNISH|")) continue;
 
-      const staff = msg.content
-        .split("|")
-        .find(p => p.startsWith("staff="))
-        ?.replace("staff=", "");
+      const event = parseEvent(msg.content);
+      const staff = event.staff;
+      const type = (event.type || "").toLowerCase();
 
       if (!staff) continue;
-      counts[staff] = (counts[staff] || 0) + 1;
+
+      if (!stats[staff]) {
+        stats[staff] = {
+          staff,
+          total: 0,
+          bans: 0,
+          mutes: 0,
+          kicks: 0,
+          blacklists: 0
+        };
+      }
+
+      stats[staff].total++;
+
+      if (type.includes("ban")) stats[staff].bans++;
+      else if (type.includes("mute")) stats[staff].mutes++;
+      else if (type.includes("kick")) stats[staff].kicks++;
+      else if (type.includes("blacklist")) stats[staff].blacklists++;
     }
 
     res.json(
-      Object.entries(counts)
-        .map(([staff, total]) => ({ staff, total }))
+      Object.values(stats)
         .sort((a, b) => b.total - a.total)
         .slice(0, 10)
     );
+
   } catch (err) {
     console.error(err);
     res.status(500).send("Leaderboard error");
   }
 });
+
 
 // ================= HELPERS =================
 function parseEvent(content) {
