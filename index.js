@@ -6,6 +6,10 @@ const bodyParser = require("body-parser");
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = "1309957290673180823";
 const PORT = 3001;
+// ================= REPLAY STORAGE =================
+const MAX_REPLAY = 50;
+const replayBuffer = [];
+
 
 if (!DISCORD_TOKEN) {
   console.error("❌ Discord token is missing");
@@ -61,22 +65,61 @@ client.login(DISCORD_TOKEN);
 client.on("messageCreate", msg => {
   if (msg.channel.id !== CHANNEL_ID) return;
 
- if (
-  !msg.content.startsWith("APPEAL_") &&
-  !msg.content.startsWith("REPORT_") &&
-  !msg.content.startsWith("PUNISH|") &&
-  !msg.content.startsWith("FLEX|") &&
-  !msg.content.startsWith("REPLAY|")
-) return;
+  // ================= STORE PUNISHMENTS =================
+  if (msg.content.startsWith("PUNISH|")) {
+    const event = parseEvent(msg.content);
 
+    replayBuffer.push({
+      staff: event.staff,
+      type: event.type,
+      player: event.player || "Unknown",
+      time: event.time
+    });
+
+    if (replayBuffer.length > MAX_REPLAY) {
+      replayBuffer.shift();
+    }
+  }
+
+  // ================= REPLAY REQUEST =================
+  if (msg.content.startsWith("REPLAY_REQUEST|")) {
+    const req = parseEvent(msg.content);
+    const count = Math.min(parseInt(req.count || 5), replayBuffer.length);
+
+    const slice = replayBuffer.slice(-count).reverse();
+
+    const data = slice
+      .map(p => `${p.staff} | ${p.type.toUpperCase()} | ${p.player}`)
+      .join(";");
+
+    const payload = {
+      type: "replay",
+      staff: req.staff,
+      data
+    };
+
+    for (const c of appealListeners) {
+      c.write(`data: ${JSON.stringify(payload)}\n\n`);
+    }
+
+    return;
+  }
+
+  // ================= NORMAL FORWARD =================
+  if (
+    !msg.content.startsWith("APPEAL_") &&
+    !msg.content.startsWith("REPORT_") &&
+    !msg.content.startsWith("PUNISH|") &&
+    !msg.content.startsWith("FLEX|")
+  ) return;
 
   const payload = parseEvent(msg.content);
-  console.log("➡️ Forwarding to MC:", payload);
 
   for (const c of appealListeners) {
     c.write(`data: ${JSON.stringify(payload)}\n\n`);
   }
 });
+
 
 // ================= LEADERBOARD =================
 app.get("/leaderboard", async (req, res) => {
