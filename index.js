@@ -6,10 +6,10 @@ const bodyParser = require("body-parser");
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = "1309957290673180823";
 const PORT = 3001;
+
 // ================= REPLAY STORAGE =================
 const MAX_REPLAY = 50;
 const replayBuffer = [];
-
 
 if (!DISCORD_TOKEN) {
   console.error("❌ Discord token is missing");
@@ -50,12 +50,6 @@ app.get("/appeals/stream", (req, res) => {
 // ================= DISCORD READY =================
 client.once("ready", async () => {
   console.log(`✅ Discord bot logged in as ${client.user.tag}`);
-
-  const channel = await client.channels.fetch(CHANNEL_ID).catch(() => null);
-  if (!channel) {
-    console.error("❌ Discord channel not found");
-    return;
-  }
 });
 
 // ================= LOGIN =================
@@ -64,27 +58,49 @@ client.login(DISCORD_TOKEN);
 // ================= DISCORD → MC =================
 client.on("messageCreate", msg => {
   if (msg.channel.id !== CHANNEL_ID) return;
+  if (!msg.content) return;
 
   // ================= STORE PUNISHMENTS =================
   if (msg.content.startsWith("PUNISH|")) {
     const event = parseEvent(msg.content);
 
-    replayBuffer.push({
-      staff: event.staff,
-      type: event.type,
+    const record = {
+      staff: event.staff || "Unknown",
+      type: event.type || "UNKNOWN",
       player: event.player || "Unknown",
-      time: event.time
-    });
+      time: event.time || Date.now()
+    };
+
+    replayBuffer.push(record);
 
     if (replayBuffer.length > MAX_REPLAY) {
       replayBuffer.shift();
     }
+
+    console.log("📦 Stored punishment:", record);
   }
 
   // ================= REPLAY REQUEST =================
   if (msg.content.startsWith("REPLAY_REQUEST|")) {
     const req = parseEvent(msg.content);
-    const count = Math.min(parseInt(req.count || 5), replayBuffer.length);
+
+    const count = Math.min(
+      parseInt(req.count || 5),
+      replayBuffer.length
+    );
+
+    console.log("🔁 Replay requested:", req.staff, "count=", count);
+
+    if (count === 0) {
+      const payload = {
+        type: "replay",
+        staff: req.staff,
+        data: "No punishments recorded yet"
+      };
+
+      broadcast(payload);
+      return;
+    }
 
     const slice = replayBuffer.slice(-count).reverse();
 
@@ -98,10 +114,7 @@ client.on("messageCreate", msg => {
       data
     };
 
-    for (const c of appealListeners) {
-      c.write(`data: ${JSON.stringify(payload)}\n\n`);
-    }
-
+    broadcast(payload);
     return;
   }
 
@@ -114,12 +127,15 @@ client.on("messageCreate", msg => {
   ) return;
 
   const payload = parseEvent(msg.content);
+  broadcast(payload);
+});
 
+// ================= BROADCAST =================
+function broadcast(payload) {
   for (const c of appealListeners) {
     c.write(`data: ${JSON.stringify(payload)}\n\n`);
   }
-});
-
+}
 
 // ================= LEADERBOARD =================
 app.get("/leaderboard", async (req, res) => {
@@ -187,4 +203,3 @@ function parseEvent(content) {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🌐 Server running on ${PORT}`);
 });
-
