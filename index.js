@@ -10,6 +10,10 @@ const PORT = 3001;
 // ================= REPLAY STORAGE =================
 const MAX_REPLAY = 50;
 const replayBuffer = [];
+const STAFF_CHAT_MAX = 500;
+const staffChatBuffer = [];
+const staffChatSeen = new Set();
+
 
 if (!DISCORD_TOKEN) {
   console.error("❌ Discord token is missing");
@@ -79,6 +83,57 @@ client.on("messageCreate", msg => {
 
     console.log("📦 Stored punishment:", record);
   }
+
+if (msg.content.startsWith("STAFF_CHAT|")) {
+  const ev = parseEvent(msg.content);
+
+  const key = ev.staff + "|" + ev.msg;
+  if (staffChatSeen.has(key)) return;
+  staffChatSeen.add(key);
+
+  const record = {
+    staff: ev.staff,
+    msg: ev.msg,
+    time: Number(ev.time) || Date.now()
+  };
+
+  staffChatBuffer.push(record);
+  if (staffChatBuffer.length > STAFF_CHAT_MAX) {
+    staffChatBuffer.shift();
+  }
+
+  console.log("💬 Staff chat stored:", record);
+}
+
+if (msg.content.startsWith("SCHISTORY_REQUEST|")) {
+  const req = parseEvent(msg.content);
+
+  const windowMap = {
+    "5m": 300,
+    "10m": 600,
+    "30m": 1800,
+    "1h": 3600
+  };
+
+  const seconds = windowMap[req.window] || 300;
+  const cutoff = Date.now()/1000 - seconds;
+
+  const slice = staffChatBuffer
+    .filter(e => e.time >= cutoff)
+    .slice(-50);
+
+  const data = slice
+    .map(e => `[${e.staff}] ${e.msg}`)
+    .join(";");
+
+  broadcast({
+    type: "schistory",
+    staff: req.staff,
+    data: data || "No staff chat in window"
+  });
+
+  return;
+}
 
   // ================= REPLAY REQUEST =================
   if (msg.content.startsWith("REPLAY_REQUEST|")) {
