@@ -7,13 +7,13 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = "1309957290673180823";
 const PORT = 3001;
 
-// ================= STORAGE =================
+// ================= REPLAY STORAGE =================
 const MAX_REPLAY = 50;
 const replayBuffer = [];
-
 const STAFF_CHAT_MAX = 500;
 const staffChatBuffer = [];
 const staffChatSeen = new Set();
+
 
 if (!DISCORD_TOKEN) {
   console.error("❌ Discord token is missing");
@@ -64,8 +64,6 @@ client.on("messageCreate", msg => {
   if (msg.channel.id !== CHANNEL_ID) return;
   if (!msg.content) return;
 
-  const nowSec = Math.floor(Date.now() / 1000);
-
   // ================= STORE PUNISHMENTS =================
   if (msg.content.startsWith("PUNISH|")) {
     const event = parseEvent(msg.content);
@@ -74,74 +72,68 @@ client.on("messageCreate", msg => {
       staff: event.staff || "Unknown",
       type: event.type || "UNKNOWN",
       player: event.player || "Unknown",
-      time: Number(event.time) || nowSec
+      time: event.time || Date.now()
     };
 
     replayBuffer.push(record);
-    if (replayBuffer.length > MAX_REPLAY) replayBuffer.shift();
+
+    if (replayBuffer.length > MAX_REPLAY) {
+      replayBuffer.shift();
+    }
 
     console.log("📦 Stored punishment:", record);
   }
 
-  // ================= STORE STAFF CHAT =================
-  if (msg.content.startsWith("STAFF_CHAT|")) {
-    const ev = parseEvent(msg.content);
+if (msg.content.startsWith("STAFF_CHAT|")) {
+  const ev = parseEvent(msg.content);
 
-    if (!ev.msg || ev.msg.includes("[Filtered]")) {
-      console.log("🚫 Ignored filtered staff message");
-      return;
-    }
+  const key = ev.staff + "|" + ev.msg;
+  if (staffChatSeen.has(key)) return;
+  staffChatSeen.add(key);
 
-    const key = ev.staff + "|" + ev.msg;
-    if (staffChatSeen.has(key)) return;
-    staffChatSeen.add(key);
+  const record = {
+    staff: ev.staff,
+    msg: ev.msg,
+    time: Number(ev.time) || Date.now()
+  };
 
-    const record = {
-      staff: ev.staff || "Unknown",
-      msg: ev.msg,
-      time: Number(ev.time) || nowSec
-    };
-
-    staffChatBuffer.push(record);
-    if (staffChatBuffer.length > STAFF_CHAT_MAX) {
-      staffChatBuffer.shift();
-    }
-
-    console.log("💬 Staff chat stored:", record);
+  staffChatBuffer.push(record);
+  if (staffChatBuffer.length > STAFF_CHAT_MAX) {
+    staffChatBuffer.shift();
   }
 
-  // ================= STAFF HISTORY REQUEST =================
-  if (msg.content.startsWith("SCHISTORY_REQUEST|")) {
-    const req = parseEvent(msg.content);
+  console.log("💬 Staff chat stored:", record);
+}
 
-    const windowMap = {
-      "5m": 300,
-      "10m": 600,
-      "30m": 1800,
-      "1h": 3600
-    };
+if (msg.content.startsWith("SCHISTORY_REQUEST|")) {
+  const req = parseEvent(msg.content);
 
-    const seconds = windowMap[req.window] || 600;
-    const cutoff = nowSec - seconds;
+  const windowMap = {
+    "5m": 300,
+    "10m": 600,
+    "30m": 1800,
+    "1h": 3600
+  };
 
-    const slice = staffChatBuffer
-      .filter(e => e.time >= cutoff)
-      .slice(-50);
+  const seconds = windowMap[req.window] || 300;
+  const cutoff = Date.now()/1000 - seconds;
 
-    const data = slice.length
-      ? slice.map(e => `[${e.staff}] ${e.msg}`).join(";")
-      : "No staff chat in window";
+  const slice = staffChatBuffer
+    .filter(e => e.time >= cutoff)
+    .slice(-50);
 
-    console.log("📜 Staff history requested:", req.window, "→", slice.length, "lines");
+  const data = slice
+  .map(e => `[${e.staff}] ${e.msg}|${e.time}`)
+  .join(";");
 
-    broadcast({
-      type: "schistory",
-      staff: req.staff,
-      data
-    });
+  broadcast({
+    type: "schistory",
+    staff: req.staff,
+    data: data || "No staff chat in window"
+  });
 
-    return;
-  }
+  return;
+}
 
   // ================= REPLAY REQUEST =================
   if (msg.content.startsWith("REPLAY_REQUEST|")) {
@@ -155,11 +147,13 @@ client.on("messageCreate", msg => {
     console.log("🔁 Replay requested:", req.staff, "count=", count);
 
     if (count === 0) {
-      broadcast({
+      const payload = {
         type: "replay",
         staff: req.staff,
         data: "No punishments recorded yet"
-      });
+      };
+
+      broadcast(payload);
       return;
     }
 
@@ -169,12 +163,13 @@ client.on("messageCreate", msg => {
       .map(p => `${p.staff} | ${p.type.toUpperCase()} | ${p.player}`)
       .join(";");
 
-    broadcast({
+    const payload = {
       type: "replay",
       staff: req.staff,
       data
-    });
+    };
 
+    broadcast(payload);
     return;
   }
 
@@ -257,6 +252,7 @@ app.get("/leaderboard", async (req, res) => {
     res.status(500).send("Leaderboard error");
   }
 });
+
 
 // ================= HELPERS =================
 function parseEvent(content) {
