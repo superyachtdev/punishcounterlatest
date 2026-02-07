@@ -14,7 +14,6 @@ const STAFF_CHAT_MAX = 500;
 const staffChatBuffer = [];
 const staffChatSeen = new Set();
 
-
 if (!DISCORD_TOKEN) {
   console.error("❌ Discord token is missing");
   process.exit(1);
@@ -60,7 +59,7 @@ client.once("ready", async () => {
 client.login(DISCORD_TOKEN);
 
 // ================= DISCORD → MC =================
-client.on("messageCreate", msg => {
+client.on("messageCreate", async msg => {
   if (msg.channel.id !== CHANNEL_ID) return;
   if (!msg.content) return;
 
@@ -72,104 +71,141 @@ client.on("messageCreate", msg => {
       staff: event.staff || "Unknown",
       type: event.type || "UNKNOWN",
       player: event.player || "Unknown",
-      time: event.time || Date.now()
+      time: Number(event.time) || Date.now() / 1000
     };
 
     replayBuffer.push(record);
-
-    if (replayBuffer.length > MAX_REPLAY) {
-      replayBuffer.shift();
-    }
+    if (replayBuffer.length > MAX_REPLAY) replayBuffer.shift();
 
     console.log("📦 Stored punishment:", record);
   }
 
-if (msg.content.startsWith("STAFF_CHAT|")) {
-  const ev = parseEvent(msg.content);
+  // ================= STAFF CHAT STORAGE =================
+  if (msg.content.startsWith("STAFF_CHAT|")) {
+    const ev = parseEvent(msg.content);
+    const key = ev.staff + "|" + ev.msg;
+    if (staffChatSeen.has(key)) return;
+    staffChatSeen.add(key);
 
-  const key = ev.staff + "|" + ev.msg;
-  if (staffChatSeen.has(key)) return;
-  staffChatSeen.add(key);
+    const record = {
+      staff: ev.staff,
+      msg: ev.msg,
+      time: Number(ev.time) || Date.now() / 1000
+    };
 
-  const record = {
-    staff: ev.staff,
-    msg: ev.msg,
-    time: Number(ev.time) || Date.now()
-  };
+    staffChatBuffer.push(record);
+    if (staffChatBuffer.length > STAFF_CHAT_MAX) staffChatBuffer.shift();
 
-  staffChatBuffer.push(record);
-  if (staffChatBuffer.length > STAFF_CHAT_MAX) {
-    staffChatBuffer.shift();
+    console.log("💬 Staff chat stored:", record);
   }
 
-  console.log("💬 Staff chat stored:", record);
-}
+  // ================= STAFF CHAT HISTORY =================
+  if (msg.content.startsWith("SCHISTORY_REQUEST|")) {
+    const req = parseEvent(msg.content);
 
-if (msg.content.startsWith("SCHISTORY_REQUEST|")) {
-  const req = parseEvent(msg.content);
+    const windowMap = {
+      "5m": 300,
+      "10m": 600,
+      "30m": 1800,
+      "1h": 3600
+    };
 
-  const windowMap = {
-    "5m": 300,
-    "10m": 600,
-    "30m": 1800,
-    "1h": 3600
-  };
+    const seconds = windowMap[req.window] || 300;
+    const cutoff = Date.now() / 1000 - seconds;
 
-  const seconds = windowMap[req.window] || 300;
-  const cutoff = Date.now()/1000 - seconds;
+    const slice = staffChatBuffer
+      .filter(e => e.time >= cutoff)
+      .slice(-50);
 
-  const slice = staffChatBuffer
-    .filter(e => e.time >= cutoff)
-    .slice(-50);
+    const data = slice
+      .map(e => `[${e.staff}] ${e.msg}|${e.time}`)
+      .join(";");
 
-  const data = slice
-  .map(e => `[${e.staff}] ${e.msg}|${e.time}`)
-  .join(";");
+    broadcast({
+      type: "schistory",
+      staff: req.staff,
+      data: data || "No staff chat in window"
+    });
 
-  broadcast({
-    type: "schistory",
-    staff: req.staff,
-    data: data || "No staff chat in window"
-  });
-
-  return;
-}
+    return;
+  }
 
   // ================= REPLAY REQUEST =================
   if (msg.content.startsWith("REPLAY_REQUEST|")) {
     const req = parseEvent(msg.content);
-
-    const count = Math.min(
-      parseInt(req.count || 5),
-      replayBuffer.length
-    );
-
-    console.log("🔁 Replay requested:", req.staff, "count=", count);
+    const count = Math.min(parseInt(req.count || 5), replayBuffer.length);
 
     if (count === 0) {
-      const payload = {
+      broadcast({
         type: "replay",
         staff: req.staff,
         data: "No punishments recorded yet"
-      };
-
-      broadcast(payload);
+      });
       return;
     }
 
-    const slice = replayBuffer.slice(-count).reverse();
-
-    const data = slice
+    const data = replayBuffer
+      .slice(-count)
+      .reverse()
       .map(p => `${p.staff} | ${p.type.toUpperCase()} | ${p.player}`)
       .join(";");
 
-    const payload = {
-      type: "replay",
-      staff: req.staff,
-      data
-    };
+    broadcast({ type: "replay", staff: req.staff, data });
+    return;
+  }
 
-    broadcast(payload);
+  // ================= PC SYNC REQUEST =================
+  if (msg.content.startsWith("PCSYNC_REQUEST|")) {
+    const req = parseEvent(msg.content);
+    const staffName = req.staff;
+
+    try {
+      const channel = await client.channels.fetch(CHANNEL_ID);
+      if (!channel) return;
+
+      let messages = [];
+      let lastId;
+
+      while (messages.length < 1000) {
+        const fetched = await channel.messages.fetch({
+          limit: 100,
+          before: lastId
+        });
+        if (!fetched.size) break;
+        messages.push(...fetched.values());
+        lastId = fetched.last().id;
+      }
+
+      let total = 0, bans = 0, mutes = 0, kicks = 0, blacklists = 0;
+
+      for (const m of messages) {
+        if (!m.content.startsWith("PUNISH|")) continue;
+        const ev = parseEvent(m.content);
+        if (!ev.staff || ev.staff.toLowerCase() !== staffName.toLowerCase()) continue;
+
+        total++;
+        const t = (ev.type || "").toLowerCase();
+        if (t.includes("ban")) bans++;
+        else if (t.includes("mute")) mutes++;
+        else if (t.includes("kick")) kicks++;
+        else if (t.includes("blacklist")) blacklists++;
+      }
+
+      broadcast({
+        type: "pcsync",
+        staff: staffName,
+        total,
+        bans,
+        mutes,
+        kicks,
+        blacklists
+      });
+
+      console.log("🔄 PCSYN sent for", staffName);
+    } catch (e) {
+      console.error("❌ PCSYNC failed", e);
+    }
+
     return;
   }
 
@@ -181,8 +217,7 @@ if (msg.content.startsWith("SCHISTORY_REQUEST|")) {
     !msg.content.startsWith("FLEX|")
   ) return;
 
-  const payload = parseEvent(msg.content);
-  broadcast(payload);
+  broadcast(parseEvent(msg.content));
 });
 
 // ================= BROADCAST =================
@@ -215,16 +250,12 @@ app.get("/leaderboard", async (req, res) => {
 
     for (const msg of messages) {
       if (!msg.content.startsWith("PUNISH|")) continue;
+      const ev = parseEvent(msg.content);
+      if (!ev.staff) continue;
 
-      const event = parseEvent(msg.content);
-      const staff = event.staff;
-      const type = (event.type || "").toLowerCase();
-
-      if (!staff) continue;
-
-      if (!stats[staff]) {
-        stats[staff] = {
-          staff,
+      if (!stats[ev.staff]) {
+        stats[ev.staff] = {
+          staff: ev.staff,
           total: 0,
           bans: 0,
           mutes: 0,
@@ -233,42 +264,32 @@ app.get("/leaderboard", async (req, res) => {
         };
       }
 
-      stats[staff].total++;
-
-      if (type.includes("ban")) stats[staff].bans++;
-      else if (type.includes("mute")) stats[staff].mutes++;
-      else if (type.includes("kick")) stats[staff].kicks++;
-      else if (type.includes("blacklist")) stats[staff].blacklists++;
+      stats[ev.staff].total++;
+      const t = (ev.type || "").toLowerCase();
+      if (t.includes("ban")) stats[ev.staff].bans++;
+      else if (t.includes("mute")) stats[ev.staff].mutes++;
+      else if (t.includes("kick")) stats[ev.staff].kicks++;
+      else if (t.includes("blacklist")) stats[ev.staff].blacklists++;
     }
 
-    res.json(
-      Object.values(stats)
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 10)
-    );
-
+    res.json(Object.values(stats).sort((a, b) => b.total - a.total).slice(0, 10));
   } catch (err) {
     console.error(err);
     res.status(500).send("Leaderboard error");
   }
 });
 
-
 // ================= HELPERS =================
 function parseEvent(content) {
   const parts = content.split("|");
   const type = parts[0].toLowerCase();
-
   const data = { type };
+
   for (const p of parts.slice(1)) {
     const idx = p.indexOf("=");
     if (idx === -1) continue;
-
-    const key = p.slice(0, idx);
-    const val = p.slice(idx + 1);
-    data[key] = val;
+    data[p.slice(0, idx)] = p.slice(idx + 1);
   }
-
   return data;
 }
 
