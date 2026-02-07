@@ -124,7 +124,7 @@ client.on("messageCreate", async msg => {
     broadcast({
       type: "schistory",
       staff: req.staff,
-      data: data || "No staff chat in window"
+      data: data || "No SC chat in window"
     });
 
     return;
