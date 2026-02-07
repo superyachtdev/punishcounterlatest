@@ -154,61 +154,6 @@ client.on("messageCreate", async msg => {
     return;
   }
 
-  // ================= PC SYNC REQUEST =================
-  if (msg.content.startsWith("PCSYNC_REQUEST|")) {
-    const req = parseEvent(msg.content);
-    const staffName = req.staff;
-
-    try {
-      const channel = await client.channels.fetch(CHANNEL_ID);
-      if (!channel) return;
-
-      let messages = [];
-      let lastId;
-
-      while (messages.length < 1000) {
-        const fetched = await channel.messages.fetch({
-          limit: 100,
-          before: lastId
-        });
-        if (!fetched.size) break;
-        messages.push(...fetched.values());
-        lastId = fetched.last().id;
-      }
-
-      let total = 0, bans = 0, mutes = 0, kicks = 0, blacklists = 0;
-
-      for (const m of messages) {
-        if (!m.content.startsWith("PUNISH|")) continue;
-        const ev = parseEvent(m.content);
-        if (!ev.staff || ev.staff.toLowerCase() !== staffName.toLowerCase()) continue;
-
-        total++;
-        const t = (ev.type || "").toLowerCase();
-        if (t.includes("ban")) bans++;
-        else if (t.includes("mute")) mutes++;
-        else if (t.includes("kick")) kicks++;
-        else if (t.includes("blacklist")) blacklists++;
-      }
-
-      broadcast({
-        type: "pcsync",
-        staff: staffName,
-        total,
-        bans,
-        mutes,
-        kicks,
-        blacklists
-      });
-
-      console.log("🔄 PCSYN sent for", staffName);
-    } catch (e) {
-      console.error("❌ PCSYNC failed", e);
-    }
-
-    return;
-  }
-
   // ================= NORMAL FORWARD =================
   if (
     !msg.content.startsWith("APPEAL_") &&
