@@ -224,6 +224,50 @@ app.get("/leaderboard", async (req, res) => {
   }
 });
 
+app.get("/staff/:name", async (req, res) => {
+  const staffName = req.params.name.toLowerCase();
+
+  try {
+    const channel = await client.channels.fetch(CHANNEL_ID);
+    if (!channel) return res.status(500).send("Channel not found");
+
+    let messages = [];
+    let lastId;
+
+    while (messages.length < 2000) {
+      const fetched = await channel.messages.fetch({
+        limit: 100,
+        before: lastId
+      });
+      if (!fetched.size) break;
+      messages.push(...fetched.values());
+      lastId = fetched.last().id;
+    }
+
+    let total = 0, bans = 0, mutes = 0, kicks = 0, blacklists = 0;
+
+    for (const msg of messages) {
+      if (!msg.content.startsWith("PUNISH|")) continue;
+      const ev = parseEvent(msg.content);
+      if (!ev.staff || ev.staff.toLowerCase() !== staffName) continue;
+
+      total++;
+      const t = (ev.type || "").toLowerCase();
+      if (t.includes("ban")) bans++;
+      else if (t.includes("mute")) mutes++;
+      else if (t.includes("kick")) kicks++;
+      else if (t.includes("blacklist")) blacklists++;
+    }
+
+    res.json({ staff: staffName, total, bans, mutes, kicks, blacklists });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Staff fetch error");
+  }
+});
+
+
 // ================= HELPERS =================
 function parseEvent(content) {
   const parts = content.split("|");
