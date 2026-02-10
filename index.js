@@ -209,6 +209,7 @@ app.get("/staff/:name", (req, res) => {
   );
 });
 
+////raaaatttatata
 // ================= BACKFILL =================
 async function backfillHistory() {
   console.log("🔄 Backfilling punishments from Discord...");
@@ -216,15 +217,29 @@ async function backfillHistory() {
   let lastId;
 
   while (true) {
-    const fetched = await channel.messages.fetch({ limit: 100, before: lastId });
+    const fetched = await channel.messages.fetch({
+      limit: 100,
+      before: lastId
+    });
+
     if (!fetched.size) break;
 
     for (const msg of fetched.values()) {
-      if (!msg.content.startsWith("PUNISH|")) continue;
+      if (!msg.content || !msg.content.startsWith("PUNISH|")) continue;
+
       const ev = parseEvent(msg.content);
       if (!ev.staff) continue;
 
       const staff = ev.staff.toLowerCase();
+
+      // 🚫 DO NOT backfill legacy staff (pre-seeded totals)
+      if (LEGACY_TOTALS[staff]) {
+        // Optional debug log (safe to remove later)
+        console.log(`⏭️ Skipping legacy staff backfill: ${staff}`);
+        continue;
+      }
+
+      // Initialize staff if new
       if (!staffStats[staff]) {
         staffStats[staff] = {
           staff,
@@ -236,7 +251,9 @@ async function backfillHistory() {
         };
       }
 
+      // Increment totals
       staffStats[staff].total++;
+
       const t = (ev.type || "").toLowerCase();
       if (t.includes("ban")) staffStats[staff].bans++;
       else if (t.includes("mute")) staffStats[staff].mutes++;
@@ -247,8 +264,9 @@ async function backfillHistory() {
     lastId = fetched.last().id;
   }
 
-  console.log("✅ Backfill complete");
+  console.log("✅ Backfill complete (legacy staff excluded)");
 }
+
 
 // ================= HELPERS =================
 function broadcast(payload) {
