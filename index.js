@@ -6,6 +6,8 @@ const bodyParser = require("body-parser");
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = "1309957290673180823";
 const PORT = 3001;
+const STAFF_CHAT_EMBED_COLOR = 0xF59E0B; // orange
+const STAFF_CHAT_ICON = "https://cdn.discordapp.com/attachments/1309957290673180823/1472237167446065284/ILlogo.png";
 
 // ================= LEGACY TOTALS =================
 const LEGACY_TOTALS = {
@@ -146,19 +148,20 @@ client.on("messageCreate", async msg => {
   }
 
   const embed = new EmbedBuilder()
-  .setColor(0x5865F2) // Discord blurple
-  .setTitle(ev.staff)
-  .setThumbnail(`https://minotar.net/helm/${ev.staff}/64.png`)
-  .setDescription(`> ${ev.msg}`)
+  .setColor(STAFF_CHAT_EMBED_COLOR)
+  .setAuthor({
+    name: ev.staff,
+    iconURL: STAFF_CHAT_ICON
+  })
+  .setDescription(ev.msg)
   .setFooter({
-    text: "Staff Chat",
-    iconURL: "https://i.imgur.com/9Xn6R0K.png" // optional subtle icon
+    text: "Staff Chat"
   })
   .setTimestamp(
-    new Date((Number(ev.time) || Date.now() / 1000) * 1000)
+    ev.time ? new Date(Number(ev.time) * 1000) : new Date()
   );
 
-  await msg.channel.send({ embeds: [embed] });
+await msg.channel.send({ embeds: [embed] });
 
   // Remove raw STAFF_CHAT line
   await msg.delete().catch(() => {});
