@@ -146,14 +146,17 @@ client.on("messageCreate", async msg => {
   }
 
   const embed = new EmbedBuilder()
-    .setColor(0x2f3136)
-    .setAuthor({
-      name: ev.staff,
-      iconURL: `https://crafatar.com/avatars/${ev.staff}?size=64&overlay`
-    })
-    .setDescription(ev.msg)
-    .setFooter({ text: "Staff Chat" })
-    .setTimestamp(new Date((Number(ev.time) || Date.now() / 1000) * 1000));
+  .setColor(0x5865F2) // Discord blurple
+  .setTitle(ev.staff)
+  .setThumbnail(`https://minotar.net/helm/${ev.staff}/64.png`)
+  .setDescription(`> ${ev.msg}`)
+  .setFooter({
+    text: "Staff Chat",
+    iconURL: "https://i.imgur.com/9Xn6R0K.png" // optional subtle icon
+  })
+  .setTimestamp(
+    new Date((Number(ev.time) || Date.now() / 1000) * 1000)
+  );
 
   await msg.channel.send({ embeds: [embed] });
 
