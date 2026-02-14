@@ -8,7 +8,8 @@ const CHANNEL_ID = "1309957290673180823";
 const PORT = 3001;
 const STAFF_CHAT_EMBED_COLOR = 0xF59E0B; // orange
 const STAFF_CHAT_ICON = "https://cdn.discordapp.com/attachments/1309957290673180823/1472237167446065284/ILlogo.png";
-
+const PUBLIC_STAFF_CHAT_CHANNEL = "1472239592575860808";
+const PUBLIC_PUNISH_CHANNEL = "1472239487646961684";
 // ================= LEGACY TOTALS =================
 const LEGACY_TOTALS = {
   "7gtz": { mutes: 129, bans: 117, kicks: 8, blacklists: 0 },
@@ -166,7 +167,10 @@ if (msg.content.startsWith("PUNISH|")) {
     })
     .setTimestamp();
 
-  await msg.channel.send({ embeds: [embed] });
+  const publicChannel = await client.channels.fetch(PUBLIC_PUNISH_CHANNEL);
+if (publicChannel) {
+  await publicChannel.send({ embeds: [embed] });
+}
 
   // Store replay
   replayBuffer.push(ev);
@@ -213,7 +217,10 @@ if (msg.content.startsWith("PUNISH|")) {
     new Date((Number(ev.time) || Date.now() / 1000) * 1000)
   );
 
-await msg.channel.send({ embeds: [embed] });
+const publicChannel = await client.channels.fetch(PUBLIC_STAFF_CHAT_CHANNEL);
+if (publicChannel) {
+  await publicChannel.send({ embeds: [embed] });
+}
 
   // Remove raw STAFF_CHAT line
   await msg.delete().catch(() => {});
