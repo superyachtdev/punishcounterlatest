@@ -94,36 +94,89 @@ client.on("messageCreate", async msg => {
   if (msg.channel.id !== CHANNEL_ID) return;
   if (!msg.content) return;
 
-  // ================= PUNISHMENTS =================
-  if (msg.content.startsWith("PUNISH|")) {
-    const ev = parseEvent(msg.content);
-    if (!ev.staff) return;
+ // ================= PUNISHMENTS =================
+if (msg.content.startsWith("PUNISH|")) {
+  const ev = parseEvent(msg.content);
+  if (!ev.staff) return;
 
-    const staff = ev.staff.toLowerCase();
+  const staff = ev.staff.toLowerCase();
 
-    if (!staffStats[staff]) {
-      staffStats[staff] = {
-        staff,
-        total: 0,
-        bans: 0,
-        mutes: 0,
-        kicks: 0,
-        blacklists: 0
-      };
-    }
-
-    staffStats[staff].total++;
-
-    const t = (ev.type || "").toLowerCase();
-    if (t.includes("ban")) staffStats[staff].bans++;
-    else if (t.includes("mute")) staffStats[staff].mutes++;
-    else if (t.includes("kick")) staffStats[staff].kicks++;
-    else if (t.includes("blacklist")) staffStats[staff].blacklists++;
-
-    replayBuffer.push(ev);
-    if (replayBuffer.length > MAX_REPLAY) replayBuffer.shift();
+  // Initialize if missing
+  if (!staffStats[staff]) {
+    staffStats[staff] = {
+      staff,
+      total: 0,
+      bans: 0,
+      mutes: 0,
+      kicks: 0,
+      blacklists: 0
+    };
   }
 
+  // Increment totals
+  staffStats[staff].total++;
+
+  const typeRaw = (ev.type || "").toLowerCase();
+
+  if (typeRaw.includes("ban")) staffStats[staff].bans++;
+  else if (typeRaw.includes("mute")) staffStats[staff].mutes++;
+  else if (typeRaw.includes("kick")) staffStats[staff].kicks++;
+  else if (typeRaw.includes("blacklist")) staffStats[staff].blacklists++;
+
+  // Determine past tense + correct counter
+  let pastTense = "punished";
+  let typeLabel = "Punishments";
+  let typeTotal = 0;
+
+  if (typeRaw.includes("ban")) {
+    pastTense = "banned";
+    typeLabel = "Bans";
+    typeTotal = staffStats[staff].bans;
+  } 
+  else if (typeRaw.includes("mute")) {
+    pastTense = "muted";
+    typeLabel = "Mutes";
+    typeTotal = staffStats[staff].mutes;
+  } 
+  else if (typeRaw.includes("kick")) {
+    pastTense = "kicked";
+    typeLabel = "Kicks";
+    typeTotal = staffStats[staff].kicks;
+  } 
+  else if (typeRaw.includes("blacklist")) {
+    pastTense = "blacklisted";
+    typeLabel = "Blacklists";
+    typeTotal = staffStats[staff].blacklists;
+  }
+
+  const player = ev.player || "Unknown Player";
+
+  // ================= EMBED =================
+  const embed = new EmbedBuilder()
+    .setColor(STAFF_CHAT_EMBED_COLOR)
+    .setTitle(ev.staff)
+    .setThumbnail(`https://minotar.net/helm/${ev.staff}/64.png`)
+    .setDescription(
+      `> ${ev.staff} just ${pastTense} **${player}** on **InvadedLands**.\n` +
+      `> They now have **${typeTotal} ${typeLabel}**.`
+    )
+    .setFooter({
+      text: "Punishment Logged",
+      iconURL: STAFF_CHAT_ICON
+    })
+    .setTimestamp();
+
+  await msg.channel.send({ embeds: [embed] });
+
+  // Store replay
+  replayBuffer.push(ev);
+  if (replayBuffer.length > MAX_REPLAY) replayBuffer.shift();
+
+  // Delete raw webhook line
+  await msg.delete().catch(() => {});
+
+  return;
+}
   // ================= STAFF CHAT =================
   if (msg.content.startsWith("STAFF_CHAT|")) {
   const ev = parseEvent(msg.content);
