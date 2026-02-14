@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits } = require("discord.js");
+const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const express = require("express");
 const bodyParser = require("body-parser");
 
@@ -124,19 +124,44 @@ client.on("messageCreate", async msg => {
 
   // ================= STAFF CHAT =================
   if (msg.content.startsWith("STAFF_CHAT|")) {
-    const ev = parseEvent(msg.content);
-    const key = ev.staff + "|" + ev.msg;
-    if (staffChatSeen.has(key)) return;
-    staffChatSeen.add(key);
+  const ev = parseEvent(msg.content);
+  if (!ev.staff || !ev.msg) return;
 
-    staffChatBuffer.push({
-      staff: ev.staff,
-      msg: ev.msg,
-      time: Number(ev.time) || Date.now() / 1000
-    });
+  // ❌ Ignore filtered staff messages
+  if (ev.msg.includes("[Filtered]")) return;
 
-    if (staffChatBuffer.length > STAFF_CHAT_MAX) staffChatBuffer.shift();
+  // Prevent duplicate echoes
+  const key = ev.staff + "|" + ev.msg;
+  if (staffChatSeen.has(key)) return;
+  staffChatSeen.add(key);
+
+  staffChatBuffer.push({
+    staff: ev.staff,
+    msg: ev.msg,
+    time: Number(ev.time) || Date.now() / 1000
+  });
+
+  if (staffChatBuffer.length > STAFF_CHAT_MAX) {
+    staffChatBuffer.shift();
   }
+
+  const embed = new EmbedBuilder()
+    .setColor(0x2f3136)
+    .setAuthor({
+      name: ev.staff,
+      iconURL: `https://crafatar.com/avatars/${ev.staff}?size=64&overlay`
+    })
+    .setDescription(ev.msg)
+    .setFooter({ text: "Staff Chat" })
+    .setTimestamp(new Date((Number(ev.time) || Date.now() / 1000) * 1000));
+
+  await msg.channel.send({ embeds: [embed] });
+
+  // Remove raw STAFF_CHAT line
+  await msg.delete().catch(() => {});
+  return;
+}
+
 
   // ================= SCHISTORY =================
   if (msg.content.startsWith("SCHISTORY_REQUEST|")) {
