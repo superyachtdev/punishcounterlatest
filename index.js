@@ -10,6 +10,7 @@ const STAFF_CHAT_EMBED_COLOR = 0xF59E0B; // orange
 const STAFF_CHAT_ICON = "https://cdn.discordapp.com/attachments/1309957290673180823/1472237167446065284/ILlogo.png";
 const PUBLIC_STAFF_CHAT_CHANNEL = "1472239592575860808";
 const PUBLIC_PUNISH_CHANNEL = "1472239487646961684";
+const reasonStats = {};
 // ================= LEGACY TOTALS =================
 const LEGACY_TOTALS = {
   "7gtz": { mutes: 129, bans: 117, kicks: 8, blacklists: 0 },
@@ -98,6 +99,10 @@ client.on("messageCreate", async msg => {
  // ================= PUNISHMENTS =================
 if (msg.content.startsWith("PUNISH|")) {
   const ev = parseEvent(msg.content);
+  const reason = (ev.reason || "Unknown")
+  .replace(/#\d+/g, "")
+  .trim()
+  .toLowerCase();
   if (!ev.staff) return;
 
   const staff = ev.staff.toLowerCase();
@@ -123,6 +128,24 @@ if (msg.content.startsWith("PUNISH|")) {
   else if (typeRaw.includes("mute")) staffStats[staff].mutes++;
   else if (typeRaw.includes("kick")) staffStats[staff].kicks++;
   else if (typeRaw.includes("blacklist")) staffStats[staff].blacklists++;
+
+// ================= REASON TRACKING =================
+if (!reasonStats[reason]) {
+  reasonStats[reason] = {
+    total: 0,
+    bans: 0,
+    mutes: 0,
+    kicks: 0,
+    blacklists: 0
+  };
+}
+
+reasonStats[reason].total++;
+
+if (typeRaw.includes("ban")) reasonStats[reason].bans++;
+else if (typeRaw.includes("mute")) reasonStats[reason].mutes++;
+else if (typeRaw.includes("kick")) reasonStats[reason].kicks++;
+else if (typeRaw.includes("blacklist")) reasonStats[reason].blacklists++;
 
   // Determine past tense + correct counter
   let pastTense = "punished";
@@ -316,10 +339,53 @@ app.get("/staff/:name", (req, res) => {
   );
 });
 
+app.get("/analytics/topreasons", (req, res) => {
+  const data = Object.entries(reasonStats)
+    .map(([label, stats]) => ({
+      label,
+      value: stats.total
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+
+  res.json(data);
+});
+
+app.get("/analytics/reasontrend", (req, res) => {
+  const reason = (req.query.reason || "").trim();
+  if (!reasonStats[reason]) {
+    return res.json([]);
+  }
+
+  const stats = reasonStats[reason];
+
+  res.json([
+    { label: "Total", value: stats.total },
+    { label: "Bans", value: stats.bans },
+    { label: "Mutes", value: stats.mutes },
+    { label: "Kicks", value: stats.kicks },
+    { label: "Blacklists", value: stats.blacklists }
+  ]);
+});
+
+app.get("/analytics/reasons", (req, res) => {
+  const data = Object.entries(reasonStats)
+    .map(([label, stats]) => ({
+      label,
+      value: stats.total
+    }));
+
+  res.json(data);
+});
+
 ////raaaatttatata
 // ================= BACKFILL =================
 async function backfillHistory() {
-  console.log("🔄 Backfilling punishments from Discord...");
+  console.log("🔄 Backfilling punishments + reasons from Discord...");
+
+  // 🔥 CLEAR MEMORY FIRST (prevents double counting)
+  for (const key in reasonStats) delete reasonStats[key];
+
   const channel = await client.channels.fetch(CHANNEL_ID);
   let lastId;
 
@@ -338,15 +404,9 @@ async function backfillHistory() {
       if (!ev.staff) continue;
 
       const staff = ev.staff.toLowerCase();
+      const typeRaw = (ev.type || "").toLowerCase();
 
-      // 🚫 DO NOT backfill legacy staff (pre-seeded totals)
-      if (LEGACY_TOTALS[staff]) {
-        // Optional debug log (safe to remove later)
-        console.log(`⏭️ Skipping legacy staff backfill: ${staff}`);
-        continue;
-      }
-
-      // Initialize staff if new
+      // ================= STAFF TOTALS =================
       if (!staffStats[staff]) {
         staffStats[staff] = {
           staff,
@@ -358,22 +418,42 @@ async function backfillHistory() {
         };
       }
 
-      // Increment totals
       staffStats[staff].total++;
 
-      const t = (ev.type || "").toLowerCase();
-      if (t.includes("ban")) staffStats[staff].bans++;
-      else if (t.includes("mute")) staffStats[staff].mutes++;
-      else if (t.includes("kick")) staffStats[staff].kicks++;
-      else if (t.includes("blacklist")) staffStats[staff].blacklists++;
+      if (typeRaw.includes("ban")) staffStats[staff].bans++;
+      else if (typeRaw.includes("mute")) staffStats[staff].mutes++;
+      else if (typeRaw.includes("kick")) staffStats[staff].kicks++;
+      else if (typeRaw.includes("blacklist")) staffStats[staff].blacklists++;
+
+      // ================= REASON TRACKING =================
+      const reason = (ev.reason || "Unknown")
+        .replace(/#\d+/g, "")
+        .trim()
+        .toLowerCase();
+
+      if (!reasonStats[reason]) {
+        reasonStats[reason] = {
+          total: 0,
+          bans: 0,
+          mutes: 0,
+          kicks: 0,
+          blacklists: 0
+        };
+      }
+
+      reasonStats[reason].total++;
+
+      if (typeRaw.includes("ban")) reasonStats[reason].bans++;
+      else if (typeRaw.includes("mute")) reasonStats[reason].mutes++;
+      else if (typeRaw.includes("kick")) reasonStats[reason].kicks++;
+      else if (typeRaw.includes("blacklist")) reasonStats[reason].blacklists++;
     }
 
     lastId = fetched.last().id;
   }
 
-  console.log("✅ Backfill complete (legacy staff excluded)");
+  console.log("✅ Backfill complete (punishments + reasons rebuilt)");
 }
-
 
 // ================= HELPERS =================
 function broadcast(payload) {
