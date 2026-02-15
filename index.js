@@ -84,7 +84,8 @@ if (msg.content.startsWith("PUNISH|")) {
   const ev = parseEvent(msg.content);
   const reason = (ev.reason || "Unknown")
   .replace(/#\d+/g, "")
-  .trim();
+  .trim()
+  .toLowerCase();
   if (!ev.staff) return;
 
   const staff = ev.staff.toLowerCase();
@@ -180,7 +181,7 @@ const embed = new EmbedBuilder()
   .setTitle(ev.staff)
   .setThumbnail(`https://minotar.net/helm/${ev.staff}/64.png`)
   .setDescription(
-  `> ${ev.staff} just ${pastTense} **${player}** for **${reason || "Unknown"}**.\n` +
+  `> ${ev.staff} just ${pastTense} **${player}** for **${formatReason(reason || "Unknown")}**.\n` +
   `> They now have **${typeTotal} ${typeLabel}**.`
 )
   .setFooter({
@@ -298,6 +299,13 @@ if (publicChannel) {
   broadcast(parseEvent(msg.content));
 });
 
+function formatReason(reason) {
+  return reason
+    .toLowerCase()
+    .split(" ")
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 // ================= API =================
 app.get("/leaderboard", (req, res) => {
   res.json(
@@ -324,9 +332,9 @@ app.get("/staff/:name", (req, res) => {
 app.get("/analytics/topreasons", (req, res) => {
   const data = Object.entries(reasonStats)
     .map(([label, stats]) => ({
-      label,
-      value: stats.total
-    }))
+  label: formatReason(label),
+  value: stats.total
+}))
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
 
@@ -344,13 +352,13 @@ app.get("/analytics/reasontrend", (req, res) => {
 
   const stats = reasonStats[reason];
 
-  res.json([
-    { label: "Total", value: stats.total },
-    { label: "Bans", value: stats.bans },
-    { label: "Mutes", value: stats.mutes },
-    { label: "Kicks", value: stats.kicks },
-    { label: "Blacklists", value: stats.blacklists }
-  ]);
+ res.json([
+  { label: formatReason(reason), value: stats.total },
+  { label: "Bans", value: stats.bans },
+  { label: "Mutes", value: stats.mutes },
+  { label: "Kicks", value: stats.kicks },
+  { label: "Blacklists", value: stats.blacklists }
+]);
 });
 
 app.get("/analytics/reasons", (req, res) => {
