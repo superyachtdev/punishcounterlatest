@@ -84,8 +84,7 @@ if (msg.content.startsWith("PUNISH|")) {
   const ev = parseEvent(msg.content);
   const reason = (ev.reason || "Unknown")
   .replace(/#\d+/g, "")
-  .trim()
-  .toLowerCase();
+  .trim();
   if (!ev.staff) return;
 
   const staff = ev.staff.toLowerCase();
@@ -335,7 +334,10 @@ app.get("/analytics/topreasons", (req, res) => {
 });
 
 app.get("/analytics/reasontrend", (req, res) => {
-  const reason = (req.query.reason || "").trim();
+  const reason = (req.query.reason || "")
+    .trim()
+    .toLowerCase();
+
   if (!reasonStats[reason]) {
     return res.json([]);
   }
