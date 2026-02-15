@@ -1,7 +1,6 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const express = require("express");
 const bodyParser = require("body-parser");
-
 // ================= CONFIG =================
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = "1309957290673180823";
@@ -10,8 +9,9 @@ const STAFF_CHAT_EMBED_COLOR = 0xF59E0B; // orange
 const STAFF_CHAT_ICON = "https://cdn.discordapp.com/attachments/1309957290673180823/1472237167446065284/ILlogo.png";
 const PUBLIC_STAFF_CHAT_CHANNEL = "1472239592575860808";
 const PUBLIC_PUNISH_CHANNEL = "1472239487646961684";
-const reasonStats = {};
+let reasonStats = {};
 // ================= LEGACY TOTALS =================
+
 
 // ================= REPLAY / STAFF CHAT =================
 const MAX_REPLAY = 50;
@@ -21,7 +21,7 @@ const staffChatBuffer = [];
 const staffChatSeen = new Set();
 
 // ================= PERSISTENT STATS =================
-const staffStats = {};
+let staffStats = {};
 
 if (!DISCORD_TOKEN) {
   console.error("❌ Discord token missing");
@@ -60,13 +60,20 @@ app.get("/appeals/stream", (req, res) => {
 });
 
 // ================= DISCORD READY =================
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   console.log(`✅ Discord bot logged in as ${client.user.tag}`);
 
-  // 🔹 Apply legacy totals ONCE
+  // 🔥 Set bot presence
+  client.user.setPresence({
+    activities: [
+      {
+        name: "Counting punishments on Invaded!",
+        type: 3 // Playing
+      }
+    ],
+    status: "online"
+  });
 
-
-  // 🔹 Backfill newer punishments from Discord
   await backfillHistory();
 
   console.log("🚀 PunishCounter fully initialized");
@@ -252,7 +259,6 @@ if (publicChannel) {
   await publicChannel.send({ embeds: [embed] });
 }
 
-  // Remove raw STAFF_CHAT line
   await msg.delete().catch(() => {});
   return;
 }
@@ -305,6 +311,8 @@ if (publicChannel) {
 
   broadcast(parseEvent(msg.content));
 });
+
+
 
 function formatReason(reason) {
   return reason
@@ -443,8 +451,8 @@ async function backfillHistory() {
   console.log("🔄 Rebuilding all punishments from Discord...");
 
   // 🔥 Clear memory first (prevents duplication)
-  for (const key in staffStats) delete staffStats[key];
-  for (const key in reasonStats) delete reasonStats[key];
+  staffStats = {};
+  reasonStats = {};
 
   const channel = await client.channels.fetch(CHANNEL_ID);
   let lastId;
