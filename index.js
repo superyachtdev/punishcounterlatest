@@ -436,10 +436,6 @@ async function backfillHistory() {
   for (const key in staffStats) delete staffStats[key];
   for (const key in reasonStats) delete reasonStats[key];
 
-  if (!staffStats[staff].reasons[reason]) {
-  staffStats[staff].reasons[reason] = 0;
-}
-staffStats[staff].reasons[reason]++;
   const channel = await client.channels.fetch(CHANNEL_ID);
   let lastId;
 
@@ -459,20 +455,25 @@ staffStats[staff].reasons[reason]++;
 
       const staff = ev.staff.toLowerCase();
       const typeRaw = (ev.type || "").toLowerCase();
+      const reason = (ev.reason || "Unknown")
+        .replace(/#\d+/g, "")
+        .trim()
+        .toLowerCase();
+
+      // ================= STAFF INIT =================
+      if (!staffStats[staff]) {
+        staffStats[staff] = {
+          staff,
+          total: 0,
+          bans: 0,
+          mutes: 0,
+          kicks: 0,
+          blacklists: 0,
+          reasons: {}
+        };
+      }
 
       // ================= STAFF TOTALS =================
-      if (!staffStats[staff]) {
-  staffStats[staff] = {
-    staff,
-    total: 0,
-    bans: 0,
-    mutes: 0,
-    kicks: 0,
-    blacklists: 0,
-    reasons: {}
-  };
-}
-
       staffStats[staff].total++;
 
       if (typeRaw.includes("ban")) staffStats[staff].bans++;
@@ -480,12 +481,7 @@ staffStats[staff].reasons[reason]++;
       else if (typeRaw.includes("kick")) staffStats[staff].kicks++;
       else if (typeRaw.includes("blacklist")) staffStats[staff].blacklists++;
 
-      // ================= REASON TRACKING =================
-      const reason = (ev.reason || "Unknown")
-        .replace(/#\d+/g, "")
-        .trim()
-        .toLowerCase();
-
+      // ================= GLOBAL REASON STATS =================
       if (!reasonStats[reason]) {
         reasonStats[reason] = {
           total: 0,
@@ -502,6 +498,13 @@ staffStats[staff].reasons[reason]++;
       else if (typeRaw.includes("mute")) reasonStats[reason].mutes++;
       else if (typeRaw.includes("kick")) reasonStats[reason].kicks++;
       else if (typeRaw.includes("blacklist")) reasonStats[reason].blacklists++;
+
+      // ================= STAFF REASON BREAKDOWN =================
+      if (!staffStats[staff].reasons[reason]) {
+        staffStats[staff].reasons[reason] = 0;
+      }
+
+      staffStats[staff].reasons[reason]++;
     }
 
     lastId = fetched.last().id;
@@ -509,7 +512,6 @@ staffStats[staff].reasons[reason]++;
 
   console.log("✅ Backfill complete (punishments + reasons rebuilt)");
 }
-
 // ================= HELPERS =================
 function broadcast(payload) {
   for (const c of appealListeners) {
