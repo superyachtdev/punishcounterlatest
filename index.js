@@ -416,14 +416,24 @@ app.get("/analytics/modhealth", (req, res) => {
     ? ((totalMutes / totalPunishments) * 100).toFixed(1)
     : 0;
 
-  const topReason = Object.entries(reasonStats)
-    .sort((a, b) => b[1].total - a[1].total)[0];
+  // 🔥 Exclude "unknown" from top reason
+  const filteredReasons = Object.entries(reasonStats)
+    .filter(([reason]) => reason !== "unknown");
+
+  let topReason = null;
+
+  if (filteredReasons.length) {
+    topReason = filteredReasons
+      .sort((a, b) => b[1].total - a[1].total)[0];
+  }
 
   res.json({
     totalPunishments,
     banPercent,
     mutePercent,
-    topReason: topReason ? formatReason(topReason[0]) : "None"
+    topReason: topReason
+      ? formatReason(topReason[0])
+      : "No Data Yet"
   });
 });
 
