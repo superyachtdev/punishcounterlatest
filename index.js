@@ -12,14 +12,6 @@ const PUBLIC_STAFF_CHAT_CHANNEL = "1472239592575860808";
 const PUBLIC_PUNISH_CHANNEL = "1472239487646961684";
 const reasonStats = {};
 // ================= LEGACY TOTALS =================
-const LEGACY_TOTALS = {
-  "7gtz": { mutes: 129, bans: 117, kicks: 8, blacklists: 0 },
-  "fallenphoenix111": { mutes: 65, bans: 112, kicks: 0, blacklists: 0 },
-  "superyacht": { mutes: 61, bans: 79, kicks: 1, blacklists: 0 },
-  "skeppycat": { mutes: 56, bans: 64, kicks: 2, blacklists: 0 },
-  "mddey": { mutes: 2, bans: 8, kicks: 0, blacklists: 0 },
-  "internals": { mutes: 18, bans: 10, kicks: 0, blacklists: 0 }
-};
 
 // ================= REPLAY / STAFF CHAT =================
 const MAX_REPLAY = 50;
@@ -72,16 +64,7 @@ client.once("ready", async () => {
   console.log(`✅ Discord bot logged in as ${client.user.tag}`);
 
   // 🔹 Apply legacy totals ONCE
-  for (const [staff, data] of Object.entries(LEGACY_TOTALS)) {
-    staffStats[staff] = {
-      staff,
-      mutes: data.mutes,
-      bans: data.bans,
-      kicks: data.kicks,
-      blacklists: data.blacklists,
-      total: data.mutes + data.bans + data.kicks + data.blacklists
-    };
-  }
+
 
   // 🔹 Backfill newer punishments from Discord
   await backfillHistory();
@@ -381,9 +364,10 @@ app.get("/analytics/reasons", (req, res) => {
 ////raaaatttatata
 // ================= BACKFILL =================
 async function backfillHistory() {
-  console.log("🔄 Backfilling punishments + reasons from Discord...");
+  console.log("🔄 Rebuilding all punishments from Discord...");
 
-  // 🔥 CLEAR MEMORY FIRST (prevents double counting)
+  // 🔥 Clear memory first (prevents duplication)
+  for (const key in staffStats) delete staffStats[key];
   for (const key in reasonStats) delete reasonStats[key];
 
   const channel = await client.channels.fetch(CHANNEL_ID);
