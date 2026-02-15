@@ -13,9 +13,9 @@ const PUBLIC_PUNISH_CHANNEL = "1472239487646961684";
 // ================= LEGACY TOTALS =================
 const LEGACY_TOTALS = {
   "7gtz": { mutes: 129, bans: 117, kicks: 8, blacklists: 0 },
-  "fallenphoenix111": { mutes: 65, bans: 106, kicks: 0, blacklists: 0 },
-  "superyacht": { mutes: 58, bans: 78, kicks: 1, blacklists: 0 },
-  "skeppycat": { mutes: 47, bans: 59, kicks: 2, blacklists: 0 },
+  "fallenphoenix111": { mutes: 65, bans: 112, kicks: 0, blacklists: 0 },
+  "superyacht": { mutes: 61, bans: 79, kicks: 1, blacklists: 0 },
+  "skeppycat": { mutes: 56, bans: 64, kicks: 2, blacklists: 0 },
   "mddey": { mutes: 2, bans: 8, kicks: 0, blacklists: 0 },
   "internals": { mutes: 18, bans: 10, kicks: 0, blacklists: 0 }
 };
@@ -153,19 +153,36 @@ if (msg.content.startsWith("PUNISH|")) {
   const player = ev.player || "Unknown Player";
 
   // ================= EMBED =================
-  const embed = new EmbedBuilder()
-    .setColor(STAFF_CHAT_EMBED_COLOR)
-    .setTitle(ev.staff)
-    .setThumbnail(`https://minotar.net/helm/${ev.staff}/64.png`)
-    .setDescription(
-      `> ${ev.staff} just ${pastTense} **${player}** on **InvadedLands**.\n` +
-      `> They now have **${typeTotal} ${typeLabel}**.`
-    )
-    .setFooter({
-      text: "Punishment Logged",
-      iconURL: STAFF_CHAT_ICON
-    })
-    .setTimestamp();
+  // ================= EMBED COLOR BY TYPE =================
+let embedColor = 0xF59E0B; // default orange
+
+if (typeRaw.includes("ban")) {
+  embedColor = 0xDC2626; // red
+}
+else if (typeRaw.includes("mute")) {
+  embedColor = 0xF59E0B; // orange
+}
+else if (typeRaw.includes("kick")) {
+  embedColor = 0x16A34A; // green
+}
+else if (typeRaw.includes("blacklist")) {
+  embedColor = 0x000000; // black
+}
+
+// ================= EMBED =================
+const embed = new EmbedBuilder()
+  .setColor(embedColor)
+  .setTitle(ev.staff)
+  .setThumbnail(`https://minotar.net/helm/${ev.staff}/64.png`)
+  .setDescription(
+    `> ${ev.staff} just ${pastTense} **${player}** on **InvadedLands**.\n` +
+    `> They now have **${typeTotal} ${typeLabel}**.`
+  )
+  .setFooter({
+    text: "Punishment Logged",
+    iconURL: STAFF_CHAT_ICON
+  })
+  .setTimestamp();
 
   const publicChannel = await client.channels.fetch(PUBLIC_PUNISH_CHANNEL);
 if (publicChannel) {
