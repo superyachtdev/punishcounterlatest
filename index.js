@@ -328,13 +328,13 @@ app.get("/staff/:name", (req, res) => {
     }
   );
 });
-
 app.get("/analytics/topreasons", (req, res) => {
   const data = Object.entries(reasonStats)
+    .filter(([label]) => label !== "unknown") // ❌ remove Unknown
     .map(([label, stats]) => ({
-  label: formatReason(label),
-  value: stats.total
-}))
+      label: formatReason(label),
+      value: stats.total
+    }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
 
@@ -342,23 +342,25 @@ app.get("/analytics/topreasons", (req, res) => {
 });
 
 app.get("/analytics/reasontrend", (req, res) => {
-  const reason = (req.query.reason || "")
-    .trim()
-    .toLowerCase();
+  const query = (req.query.reason || "").trim().toLowerCase();
 
-  if (!reasonStats[reason]) {
+  // Find matching key manually (true case-insensitive match)
+  const matchedKey = Object.keys(reasonStats)
+    .find(r => r.toLowerCase() === query);
+
+  if (!matchedKey || matchedKey === "unknown") {
     return res.json([]);
   }
 
-  const stats = reasonStats[reason];
+  const stats = reasonStats[matchedKey];
 
- res.json([
-  { label: formatReason(reason), value: stats.total },
-  { label: "Bans", value: stats.bans },
-  { label: "Mutes", value: stats.mutes },
-  { label: "Kicks", value: stats.kicks },
-  { label: "Blacklists", value: stats.blacklists }
-]);
+  res.json([
+    { label: formatReason(matchedKey), value: stats.total },
+    { label: "Bans", value: stats.bans },
+    { label: "Mutes", value: stats.mutes },
+    { label: "Kicks", value: stats.kicks },
+    { label: "Blacklists", value: stats.blacklists }
+  ]);
 });
 
 app.get("/analytics/reasons", (req, res) => {
