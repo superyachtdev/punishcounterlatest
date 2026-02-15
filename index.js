@@ -181,9 +181,9 @@ const embed = new EmbedBuilder()
   .setTitle(ev.staff)
   .setThumbnail(`https://minotar.net/helm/${ev.staff}/64.png`)
   .setDescription(
-    `> ${ev.staff} just ${pastTense} **${player}** on **InvadedLands**.\n` +
-    `> They now have **${typeTotal} ${typeLabel}**.`
-  )
+  `> ${ev.staff} just ${pastTense} **${player}** for **${reason || "Unknown"}**.\n` +
+  `> They now have **${typeTotal} ${typeLabel}**.`
+)
   .setFooter({
     text: "Punishment Logged",
     iconURL: STAFF_CHAT_ICON
