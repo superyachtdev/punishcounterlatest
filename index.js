@@ -448,31 +448,72 @@ app.get("/analytics/modhealth", (req, res) => {
 ////raaaatttatata
 // ================= BACKFILL =================
 async function backfillHistory() {
-  console.log("🔄 Rebuilding all punishments from Discord...");
+  console.log("🔄 Rebuilding all punishments from BOTH sources...");
 
-  // 🔥 Clear memory first (prevents duplication)
+  // 🔥 Reset memory
   staffStats = {};
   reasonStats = {};
 
-  const channel = await client.channels.fetch(PUBLIC_PUNISH_CHANNEL);
-  let lastId;
+  // Prevent double counting
+  const processedKeys = new Set();
+
+  // =============================
+  // 1️⃣ RAW WEBHOOK CHANNEL (OLD DATA)
+  // =============================
+  const rawChannel = await client.channels.fetch(CHANNEL_ID);
+  let lastIdRaw;
 
   while (true) {
-    const fetched = await channel.messages.fetch({
+    const fetched = await rawChannel.messages.fetch({
       limit: 100,
-      before: lastId
+      before: lastIdRaw
     });
 
     if (!fetched.size) break;
 
     for (const msg of fetched.values()) {
+      if (!msg.content || !msg.content.startsWith("PUNISH|")) continue;
 
-      // 🔥 Only process embed messages
+      const ev = parseEvent(msg.content);
+      if (!ev.staff) continue;
+
+      const staff = ev.staff.toLowerCase();
+      const typeRaw = (ev.type || "").toLowerCase();
+      const reason = (ev.reason || "Unknown")
+        .replace(/#\d+/g, "")
+        .trim()
+        .toLowerCase();
+
+      // Unique key to prevent duplicates
+      const uniqueKey = `${staff}|${ev.player}|${ev.time}`;
+      if (processedKeys.has(uniqueKey)) continue;
+      processedKeys.add(uniqueKey);
+
+      applyPunishment(staff, typeRaw, reason);
+    }
+
+    lastIdRaw = fetched.last().id;
+  }
+
+  // =============================
+  // 2️⃣ PUBLIC EMBED CHANNEL (NEW DATA)
+  // =============================
+  const embedChannel = await client.channels.fetch(PUBLIC_PUNISH_CHANNEL);
+  let lastIdEmbed;
+
+  while (true) {
+    const fetched = await embedChannel.messages.fetch({
+      limit: 100,
+      before: lastIdEmbed
+    });
+
+    if (!fetched.size) break;
+
+    for (const msg of fetched.values()) {
       if (!msg.embeds || !msg.embeds.length) continue;
 
       const embed = msg.embeds[0];
 
-      // 🔥 Only process punishment logs
       if (!embed.footer || embed.footer.text !== "Punishment Logged") continue;
 
       const staff = embed.title ? embed.title.toLowerCase() : null;
@@ -480,70 +521,74 @@ async function backfillHistory() {
 
       const description = embed.description || "";
 
-      // 🔥 Extract reason from: for **Reason**
       const reasonMatch = description.match(/for \*\*(.*?)\*\*/);
       const reason = reasonMatch
         ? reasonMatch[1].replace(/#\d+/g, "").trim().toLowerCase()
         : "unknown";
 
-      // 🔥 Detect type from description text
       let typeRaw = "unknown";
       if (description.includes("banned")) typeRaw = "ban";
       else if (description.includes("muted")) typeRaw = "mute";
       else if (description.includes("kicked")) typeRaw = "kick";
       else if (description.includes("blacklisted")) typeRaw = "blacklist";
 
-      // ================= STAFF INIT =================
-      if (!staffStats[staff]) {
-        staffStats[staff] = {
-          staff,
-          total: 0,
-          bans: 0,
-          mutes: 0,
-          kicks: 0,
-          blacklists: 0,
-          reasons: {}
-        };
-      }
+      // Unique key (embed message ID is safe)
+      const uniqueKey = `embed|${msg.id}`;
+      if (processedKeys.has(uniqueKey)) continue;
+      processedKeys.add(uniqueKey);
 
-      // ================= STAFF TOTALS =================
-      staffStats[staff].total++;
-
-      if (typeRaw === "ban") staffStats[staff].bans++;
-      else if (typeRaw === "mute") staffStats[staff].mutes++;
-      else if (typeRaw === "kick") staffStats[staff].kicks++;
-      else if (typeRaw === "blacklist") staffStats[staff].blacklists++;
-
-      // ================= GLOBAL REASON STATS =================
-      if (!reasonStats[reason]) {
-        reasonStats[reason] = {
-          total: 0,
-          bans: 0,
-          mutes: 0,
-          kicks: 0,
-          blacklists: 0
-        };
-      }
-
-      reasonStats[reason].total++;
-
-      if (typeRaw === "ban") reasonStats[reason].bans++;
-      else if (typeRaw === "mute") reasonStats[reason].mutes++;
-      else if (typeRaw === "kick") reasonStats[reason].kicks++;
-      else if (typeRaw === "blacklist") reasonStats[reason].blacklists++;
-
-      // ================= STAFF REASON BREAKDOWN =================
-      if (!staffStats[staff].reasons[reason]) {
-        staffStats[staff].reasons[reason] = 0;
-      }
-
-      staffStats[staff].reasons[reason]++;
+      applyPunishment(staff, typeRaw, reason);
     }
 
-    lastId = fetched.last().id;
+    lastIdEmbed = fetched.last().id;
   }
 
-  console.log("✅ Backfill complete (punishments + reasons rebuilt)");
+  console.log("✅ Backfill complete (raw + embed merged)");
+}
+
+function applyPunishment(staff, typeRaw, reason) {
+
+  if (!staffStats[staff]) {
+    staffStats[staff] = {
+      staff,
+      total: 0,
+      bans: 0,
+      mutes: 0,
+      kicks: 0,
+      blacklists: 0,
+      reasons: {}
+    };
+  }
+
+  staffStats[staff].total++;
+
+  if (typeRaw.includes("ban")) staffStats[staff].bans++;
+  else if (typeRaw.includes("mute")) staffStats[staff].mutes++;
+  else if (typeRaw.includes("kick")) staffStats[staff].kicks++;
+  else if (typeRaw.includes("blacklist")) staffStats[staff].blacklists++;
+
+  if (!reasonStats[reason]) {
+    reasonStats[reason] = {
+      total: 0,
+      bans: 0,
+      mutes: 0,
+      kicks: 0,
+      blacklists: 0
+    };
+  }
+
+  reasonStats[reason].total++;
+
+  if (typeRaw.includes("ban")) reasonStats[reason].bans++;
+  else if (typeRaw.includes("mute")) reasonStats[reason].mutes++;
+  else if (typeRaw.includes("kick")) reasonStats[reason].kicks++;
+  else if (typeRaw.includes("blacklist")) reasonStats[reason].blacklists++;
+
+  if (!staffStats[staff].reasons[reason]) {
+    staffStats[staff].reasons[reason] = 0;
+  }
+
+  staffStats[staff].reasons[reason]++;
 }
 // ================= HELPERS =================
 function broadcast(payload) {
