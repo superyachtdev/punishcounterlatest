@@ -92,15 +92,16 @@ if (msg.content.startsWith("PUNISH|")) {
 
   // Initialize if missing
   if (!staffStats[staff]) {
-    staffStats[staff] = {
-      staff,
-      total: 0,
-      bans: 0,
-      mutes: 0,
-      kicks: 0,
-      blacklists: 0
-    };
-  }
+  staffStats[staff] = {
+    staff,
+    total: 0,
+    bans: 0,
+    mutes: 0,
+    kicks: 0,
+    blacklists: 0,
+    reasons: {}
+  };
+}
 
   // Increment totals
   staffStats[staff].total++;
@@ -129,6 +130,12 @@ if (typeRaw.includes("ban")) reasonStats[reason].bans++;
 else if (typeRaw.includes("mute")) reasonStats[reason].mutes++;
 else if (typeRaw.includes("kick")) reasonStats[reason].kicks++;
 else if (typeRaw.includes("blacklist")) reasonStats[reason].blacklists++;
+
+// Track reason per staff
+if (!staffStats[staff].reasons[reason]) {
+  staffStats[staff].reasons[reason] = 0;
+}
+staffStats[staff].reasons[reason]++;
 
   // Determine past tense + correct counter
   let pastTense = "punished";
@@ -373,6 +380,53 @@ app.get("/analytics/reasons", (req, res) => {
   res.json(data);
 });
 
+app.get("/analytics/staffreason/:name", (req, res) => {
+  const staff = req.params.name.toLowerCase();
+  const data = staffStats[staff];
+
+  if (!data || !data.total) {
+    return res.json([]);
+  }
+
+  const breakdown = Object.entries(data.reasons)
+    .map(([reason, count]) => ({
+      label: formatReason(reason),
+      value: count,
+      percent: ((count / data.total) * 100).toFixed(1)
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  res.json(breakdown);
+});
+
+app.get("/analytics/modhealth", (req, res) => {
+  const allStaff = Object.values(staffStats);
+
+  if (!allStaff.length) return res.json({});
+
+  const totalPunishments = allStaff.reduce((a, s) => a + s.total, 0);
+  const totalBans = allStaff.reduce((a, s) => a + s.bans, 0);
+  const totalMutes = allStaff.reduce((a, s) => a + s.mutes, 0);
+
+  const banPercent = totalPunishments
+    ? ((totalBans / totalPunishments) * 100).toFixed(1)
+    : 0;
+
+  const mutePercent = totalPunishments
+    ? ((totalMutes / totalPunishments) * 100).toFixed(1)
+    : 0;
+
+  const topReason = Object.entries(reasonStats)
+    .sort((a, b) => b[1].total - a[1].total)[0];
+
+  res.json({
+    totalPunishments,
+    banPercent,
+    mutePercent,
+    topReason: topReason ? formatReason(topReason[0]) : "None"
+  });
+});
+
 ////raaaatttatata
 // ================= BACKFILL =================
 async function backfillHistory() {
@@ -382,6 +436,10 @@ async function backfillHistory() {
   for (const key in staffStats) delete staffStats[key];
   for (const key in reasonStats) delete reasonStats[key];
 
+  if (!staffStats[staff].reasons[reason]) {
+  staffStats[staff].reasons[reason] = 0;
+}
+staffStats[staff].reasons[reason]++;
   const channel = await client.channels.fetch(CHANNEL_ID);
   let lastId;
 
@@ -404,15 +462,16 @@ async function backfillHistory() {
 
       // ================= STAFF TOTALS =================
       if (!staffStats[staff]) {
-        staffStats[staff] = {
-          staff,
-          total: 0,
-          bans: 0,
-          mutes: 0,
-          kicks: 0,
-          blacklists: 0
-        };
-      }
+  staffStats[staff] = {
+    staff,
+    total: 0,
+    bans: 0,
+    mutes: 0,
+    kicks: 0,
+    blacklists: 0,
+    reasons: {}
+  };
+}
 
       staffStats[staff].total++;
 
