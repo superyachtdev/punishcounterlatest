@@ -82,32 +82,39 @@ client.once("clientReady", async () => {
 
   // ✅ Rebuild stats normally
   await backfillHistory();
+  // ============================================
+// ✅ Skeppycat Baseline Adjustment (PERMANENT FIX)
+// ============================================
 
+const skeppy = "skeppycat";
+
+// These are the REAL correct totals
+const REAL_TOTAL = 289;
+const REAL_BANS = 117;
+const REAL_MUTES = 155;
+const REAL_KICKS = 17;
+const REAL_BLACKLISTS = 0;
+
+if (staffStats[skeppy]) {
+
+  const offsetTotal = REAL_TOTAL - staffStats[skeppy].total;
+  const offsetBans = REAL_BANS - staffStats[skeppy].bans;
+  const offsetMutes = REAL_MUTES - staffStats[skeppy].mutes;
+  const offsetKicks = REAL_KICKS - staffStats[skeppy].kicks;
+  const offsetBlacklists = REAL_BLACKLISTS - staffStats[skeppy].blacklists;
+
+  staffStats[skeppy].total += offsetTotal;
+  staffStats[skeppy].bans += offsetBans;
+  staffStats[skeppy].mutes += offsetMutes;
+  staffStats[skeppy].kicks += offsetKicks;
+  staffStats[skeppy].blacklists += offsetBlacklists;
+
+  console.log("✅ Skeppycat baseline offset applied.");
+}
   // ============================================
   // 🔥 HARD FIX: Skeppycat Totals Override
   // ============================================
 
-  const skeppy = "skeppycat";
-
-  if (!staffStats[skeppy]) {
-    staffStats[skeppy] = {
-      staff: skeppy,
-      total: 0,
-      bans: 0,
-      mutes: 0,
-      kicks: 0,
-      blacklists: 0,
-      reasons: {}
-    };
-  }
-
-  staffStats[skeppy].total = 289; // <-- SET CORRECT TOTAL
-  staffStats[skeppy].bans = 117;    // set correct values if needed
-  staffStats[skeppy].mutes = 155;
-  staffStats[skeppy].kicks = 17;
-  staffStats[skeppy].blacklists = 0;
-
-  console.log("🔧 Skeppycat totals manually corrected.");
 
   console.log("🚀 PunishCounter fully initialized");
 });
