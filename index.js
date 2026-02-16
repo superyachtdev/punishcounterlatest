@@ -3,7 +3,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const fetch = require("node-fetch");
 const { XMLParser } = require("fast-xml-parser");
-
+const { chromium } = require("playwright");
 const RSS_URL = "https://invadedlands.net/forums/ban-appeals.19/index.rss";
 
 let lastSeenGuid = null;
@@ -361,21 +361,39 @@ if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
   broadcast(parseEvent(msg.content));
 });
 
+let browser;
+let page;
+
+async function initBrowser() {
+  if (browser) return;
+
+  browser = await chromium.launch({
+    headless: true
+  });
+
+  const context = await browser.newContext({
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+  });
+
+  page = await context.newPage();
+}
+
 async function checkAppealsRSS() {
   try {
     console.log("🔄 Checking RSS...");
 
-    const response = await fetch(RSS_URL, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
-      }
+    await initBrowser();
+
+    await page.goto(RSS_URL, {
+      waitUntil: "domcontentloaded",
+      timeout: 30000
     });
 
-    const xml = await response.text();
+    const xml = await page.content();
 
     if (!xml.includes("<rss")) {
-      console.log("❌ Not valid RSS response");
+      console.log("❌ Cloudflare block detected");
       return;
     }
 
@@ -391,7 +409,7 @@ async function checkAppealsRSS() {
 
     if (!lastSeenGuid) {
       lastSeenGuid = newest.guid;
-      console.log("🧠 Initial RSS loaded. Tracking from:", lastSeenGuid);
+      console.log("🧠 Initial RSS loaded. Tracking:", lastSeenGuid);
       return;
     }
 
@@ -402,22 +420,19 @@ async function checkAppealsRSS() {
 
     lastSeenGuid = newest.guid;
 
-    const title = newest.title;
-    const link = newest.link;
-    const creator = newest.creator;
-
-    const ign = creator || title.split("'s")[0].trim();
+    const ign =
+      newest.creator || newest.title.split("'s")[0].trim();
 
     console.log("🚨 New appeal detected:", ign);
 
     await handleNewAppeal({
-      title,
-      link,
+      title: newest.title,
+      link: newest.link,
       ign
     });
 
   } catch (err) {
-    console.log("⚠️ RSS check error:", err.message);
+    console.log("⚠️ RSS error:", err.message);
   }
 }
 
