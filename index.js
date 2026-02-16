@@ -71,7 +71,7 @@ client.once("clientReady", async () => {
   client.user.setPresence({
     activities: [
       {
-        name: "Counting punishments on Invaded!",
+        name: "counting on Invaded",
         type: 3 // Playing
       }
     ],
