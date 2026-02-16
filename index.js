@@ -814,6 +814,7 @@ if (player && baseType) {
 
   saveRiskData();
 }
+}
 
 // ================= TOP OF HOUR TREND SYSTEM =================
 function scheduleTopOfHourBroadcast() {
