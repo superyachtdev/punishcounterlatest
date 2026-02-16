@@ -611,7 +611,7 @@ async function backfillHistory() {
       if (processedKeys.has(uniqueKey)) continue;
       processedKeys.add(uniqueKey);
 
-      applyPunishment(staff, typeRaw, reason);
+      applyPunishment(staff, typeRaw, reason, ev.player);
     }
 
     lastIdRaw = fetched.last().id;
@@ -642,6 +642,8 @@ async function backfillHistory() {
       if (!staff) continue;
 
       const description = embed.description || "";
+      const playerMatch = description.match(/\*\*(.*?)\*\*/);
+      const player = playerMatch ? playerMatch[1] : "unknown";
 
       const reasonMatch = description.match(/for \*\*(.*?)\*\*/);
       const reason = reasonMatch
@@ -659,7 +661,7 @@ async function backfillHistory() {
       if (processedKeys.has(uniqueKey)) continue;
       processedKeys.add(uniqueKey);
 
-      applyPunishment(staff, typeRaw, reason);
+      applyPunishment(staff, typeRaw, reason, player);
     }
 
     lastIdEmbed = fetched.last().id;
