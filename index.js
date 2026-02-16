@@ -92,18 +92,31 @@ client.once("clientReady", async () => {
   // ================= LEADERBOARD DISPLAY OFFSETS =================
 
 const REAL_BASELINES = {
-  skeppycat: 289
+  skeppycat: {
+    total: 289,
+    bans: 117,
+    mutes: 155,
+    kicks: 17,
+    blacklists: 0
+  }
 };
 
 for (const staff in REAL_BASELINES) {
-  if (staffStats[staff]) {
-    const discordTotal = staffStats[staff].total;
-    const realTotal = REAL_BASELINES[staff];
 
-    staffStats[staff].displayOffset = realTotal - discordTotal;
+  if (!staffStats[staff]) continue;
 
-    console.log(`📊 Leaderboard offset set for ${staff}: +${staffStats[staff].displayOffset}`);
-  }
+  const real = REAL_BASELINES[staff];
+  const raw = staffStats[staff];
+
+  staffStats[staff].displayOffset = {
+    total: Math.max(real.total - raw.total, 0),
+    bans: Math.max(real.bans - raw.bans, 0),
+    mutes: Math.max(real.mutes - raw.mutes, 0),
+    kicks: Math.max(real.kicks - raw.kicks, 0),
+    blacklists: Math.max(real.blacklists - raw.blacklists, 0)
+  };
+
+  console.log(`📊 Display offsets locked for ${staff}`);
 }
   loadRiskData();
   await updateLeaderboardEmbed();
@@ -825,8 +838,8 @@ async function updateLeaderboardEmbed() {
 
     const top = Object.values(staffStats)
       .sort((a, b) =>
-  (b.total + (b.displayOffset || 0)) -
-  (a.total + (a.displayOffset || 0))
+  (b.total + (b.displayOffset?.total || 0)) -
+  (a.total + (a.displayOffset?.total || 0))
 )
       .slice(0, 10);
 
@@ -839,7 +852,7 @@ async function updateLeaderboardEmbed() {
             index === 2 ? "🥉" :
             `\`${index + 1}.\``;
 
-          const displayTotal = s.total + (s.displayOffset || 0);
+          const displayTotal = s.total + (s.displayOffset?.total || 0);
 return `${medal} **${s.staff}** — ${displayTotal} total`;
         }).join("\n");
 
