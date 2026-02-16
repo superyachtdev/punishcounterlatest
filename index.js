@@ -96,7 +96,8 @@ client.once("clientReady", async () => {
   await backfillHistory();
 
   
-  // Start RSS polling
+ // Start RSS polling
+checkAppealsRSS(); // run immediately once
 setInterval(checkAppealsRSS, 20000);
   // ✅ Check appeals every 20s
 
@@ -361,6 +362,8 @@ if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
 
 async function checkAppealsRSS() {
   try {
+    console.log("🔄 Checking RSS...");
+
     const response = await fetch(RSS_URL);
     const xml = await response.text();
 
@@ -368,27 +371,34 @@ async function checkAppealsRSS() {
 
     const items = parsed?.rss?.channel?.item;
 
-    if (!items) return;
+    if (!items) {
+      console.log("❌ No RSS items found");
+      return;
+    }
 
     const newest = Array.isArray(items) ? items[0] : items;
 
+    console.log("Newest GUID:", newest.guid);
+
     if (!lastSeenGuid) {
+      console.log("📌 Setting baseline GUID:", newest.guid);
       lastSeenGuid = newest.guid;
       return;
     }
 
-    if (newest.guid === lastSeenGuid) return;
+    if (newest.guid === lastSeenGuid) {
+      console.log("⏸ No new appeal.");
+      return;
+    }
 
+    console.log("🚨 New appeal detected!");
     lastSeenGuid = newest.guid;
 
     const title = newest.title;
     const link = newest.link;
     const creator = newest["dc:creator"];
 
-    // Extract IGN
     let ign = creator || title.split("'s")[0].trim();
-
-    console.log("🚨 New appeal detected via RSS:", ign);
 
     await handleNewAppeal({
       title,
