@@ -587,34 +587,57 @@ async function backfillHistory() {
 }
 
 async function initForumSession() {
+  try {
+    console.log("🌐 Launching browser...");
 
-  console.log("🌐 Launching browser...");
+    forumBrowser = await chromium.launch({
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage"
+      ]
+    });
 
-  forumBrowser = await chromium.launch({
-    headless: true
-  });
+    const context = await forumBrowser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+    });
 
-  const context = await forumBrowser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
-  });
+    forumPage = await context.newPage();
 
-  forumPage = await context.newPage();
+    console.log("🔐 Opening login page...");
 
-  console.log("🔐 Logging into forum...");
+    await forumPage.goto("https://invadedlands.net/login", {
+      waitUntil: "domcontentloaded",
+      timeout: 60000
+    });
 
-  await forumPage.goto("https://invadedlands.net/login", { waitUntil: "domcontentloaded" });
+    // 🔍 Wait for either login field OR detect Cloudflare
+    try {
+      await forumPage.waitForSelector('input[name="login"]', {
+        timeout: 15000
+      });
+    } catch {
+      console.log("⚠️ Login field not found. Likely Cloudflare block.");
+      return;
+    }
 
-  await forumPage.fill('input[name="login"]', process.env.FORUM_EMAIL);
-  await forumPage.fill('input[name="password"]', process.env.FORUM_PASSWORD);
+    console.log("🔐 Filling credentials...");
 
-  await forumPage.click('button[type="submit"]');
+    await forumPage.fill('input[name="login"]', process.env.FORUM_EMAIL);
+    await forumPage.fill('input[name="password"]', process.env.FORUM_PASSWORD);
 
-  await forumPage.waitForTimeout(5000);
+    await forumPage.click('button[type="submit"]');
 
-  console.log("✅ Logged in.");
+    await forumPage.waitForTimeout(5000);
+
+    console.log("✅ Logged into forum successfully.");
+
+  } catch (err) {
+    console.log("❌ Forum session failed:", err.message);
+  }
 }
-
 async function checkForNewAppeals() {
   try {
 
