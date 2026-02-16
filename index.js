@@ -4,7 +4,7 @@ const bodyParser = require("body-parser");
 const fetch = require("node-fetch");
 const { XMLParser } = require("fast-xml-parser");
 
-const RSS_URL = "https://punishcounterlatest-production.up.railway.app/appeals/rss";
+const RSS_URL = "https://invadedlands.net/forums/ban-appeals.19/index.rss";
 
 let lastSeenGuid = null;
 
@@ -365,23 +365,28 @@ async function checkAppealsRSS() {
   try {
     console.log("🔄 Checking RSS...");
 
-    const response = await fetch(RSS_URL);
+    const response = await fetch(RSS_URL, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+      }
+    });
+
     const xml = await response.text();
+
+    if (!xml.includes("<rss")) {
+      console.log("❌ Not valid RSS response");
+      return;
+    }
 
     const parsed = xmlParser.parse(xml);
 
-    if (!parsed.rss || !parsed.rss.channel) {
+    if (!parsed?.rss?.channel?.item) {
       console.log("❌ RSS structure invalid");
       return;
     }
 
     const items = parsed.rss.channel.item;
-
-    if (!items) {
-      console.log("❌ No RSS items found");
-      return;
-    }
-
     const newest = Array.isArray(items) ? items[0] : items;
 
     if (!lastSeenGuid) {
@@ -432,31 +437,7 @@ app.get("/leaderboard", (req, res) => {
   );
 });
 
-app.get("/appeals/rss", async (req, res) => {
-  try {
-    const response = await fetch(
-      "https://invadedlands.net/forums/ban-appeals.19/index.rss",
-      {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
-        }
-      }
-    );
 
-    let text = await response.text();
-
-    // 🔥 Remove problematic content namespace blocks
-    text = text.replace(/<content:encoded>[\s\S]*?<\/content:encoded>/g, "");
-
-    res.setHeader("Content-Type", "text/xml");
-    res.send(text);
-
-  } catch (err) {
-    console.log("RSS proxy error:", err.message);
-    res.status(500).send("RSS fetch failed");
-  }
-});
 
 app.get("/staff/:name", (req, res) => {
   const staff = req.params.name.toLowerCase();
