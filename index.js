@@ -1,6 +1,16 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const express = require("express");
 const bodyParser = require("body-parser");
+const fetch = require("node-fetch");
+const { XMLParser } = require("fast-xml-parser");
+
+const RSS_URL = "https://invadedlands.net/forums/ban-appeals.19/index.rss";
+
+let lastSeenGuid = null;
+
+const xmlParser = new XMLParser({
+  ignoreAttributes: false
+});
 // ================= CONFIG =================
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = "1309957290673180823";
@@ -16,12 +26,10 @@ let currentHourCount = 0;
 let previousHourCount = 0;
 let lastHourTimestamp = Date.now();
 // ================= LEGACY TOTALS =================
-const { chromium } = require("playwright");
 
 const FORUM_URL = "https://invadedlands.net/forums/ban-appeals.19/";
 let lastSeenAppeal = null;
-let forumBrowser = null;
-let forumPage = null;
+
 
 // ================= REPLAY / STAFF CHAT =================
 const MAX_REPLAY = 50;
@@ -87,11 +95,10 @@ client.once("clientReady", async () => {
   // ✅ Rebuild stats normally
   await backfillHistory();
 
-  // ✅ Start forum session
-  await initForumSession();
-
+  
+  // Start RSS polling
+setInterval(checkAppealsRSS, 20000);
   // ✅ Check appeals every 20s
-  setInterval(checkForNewAppeals, 20000);
 
   console.log("🚀 PunishCounter fully initialized");
 });
@@ -352,7 +359,47 @@ if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
   broadcast(parseEvent(msg.content));
 });
 
+async function checkAppealsRSS() {
+  try {
+    const response = await fetch(RSS_URL);
+    const xml = await response.text();
 
+    const parsed = xmlParser.parse(xml);
+
+    const items = parsed?.rss?.channel?.item;
+
+    if (!items) return;
+
+    const newest = Array.isArray(items) ? items[0] : items;
+
+    if (!lastSeenGuid) {
+      lastSeenGuid = newest.guid;
+      return;
+    }
+
+    if (newest.guid === lastSeenGuid) return;
+
+    lastSeenGuid = newest.guid;
+
+    const title = newest.title;
+    const link = newest.link;
+    const creator = newest["dc:creator"];
+
+    // Extract IGN
+    let ign = creator || title.split("'s")[0].trim();
+
+    console.log("🚨 New appeal detected via RSS:", ign);
+
+    await handleNewAppeal({
+      title,
+      link,
+      ign
+    });
+
+  } catch (err) {
+    console.log("⚠️ RSS check error:", err.message);
+  }
+}
 
 function formatReason(reason) {
   return reason
@@ -586,107 +633,12 @@ async function backfillHistory() {
   console.log("✅ Backfill complete (raw + embed merged)");
 }
 
-async function initForumSession() {
-  try {
-    console.log("🌐 Launching browser...");
 
-    forumBrowser = await chromium.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage"
-      ]
-    });
-
-    const context = await forumBrowser.newContext({
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
-    });
-
-    forumPage = await context.newPage();
-
-    console.log("🔐 Opening login page...");
-
-    await forumPage.goto("https://invadedlands.net/login", {
-      waitUntil: "domcontentloaded",
-      timeout: 60000
-    });
-
-    // 🔍 Wait for either login field OR detect Cloudflare
-    try {
-      await forumPage.waitForSelector('input[name="login"]', {
-        timeout: 15000
-      });
-    } catch {
-      console.log("⚠️ Login field not found. Likely Cloudflare block.");
-      return;
-    }
-
-    console.log("🔐 Filling credentials...");
-
-    await forumPage.fill('input[name="login"]', process.env.FORUM_EMAIL);
-    await forumPage.fill('input[name="password"]', process.env.FORUM_PASSWORD);
-
-    await forumPage.click('button[type="submit"]');
-
-    await forumPage.waitForTimeout(5000);
-
-    console.log("✅ Logged into forum successfully.");
-
-  } catch (err) {
-    console.log("❌ Forum session failed:", err.message);
-  }
-}
-async function checkForNewAppeals() {
-  try {
-
-    await forumPage.goto(FORUM_URL, { waitUntil: "domcontentloaded" });
-    await forumPage.waitForTimeout(3000);
-
-    const appeals = await forumPage.$$eval(
-      ".structItem--thread",
-      rows => rows.map(r => {
-        const title = r.querySelector(".structItem-title a")?.innerText || "";
-        const link = r.querySelector(".structItem-title a")?.href || "";
-        return { title, link };
-      })
-    );
-
-    if (!appeals.length) return;
-
-    const newest = appeals[0];
-
-    if (!lastSeenAppeal) {
-      lastSeenAppeal = newest.link;
-      return;
-    }
-
-    if (newest.link !== lastSeenAppeal) {
-
-      lastSeenAppeal = newest.link;
-
-      console.log("🚨 New appeal detected:", newest.title);
-
-      await handleNewAppeal(newest);
-    }
-
-  } catch (err) {
-    console.log("⚠️ Appeal check error:", err.message);
-  }
-}
 
 async function handleNewAppeal(appeal) {
   try {
 
-    // Extract IGN properly (remove "'s Ban Appeal...")
-    let ign = appeal.title;
-
-    if (ign.includes("'s")) {
-      ign = ign.split("'s")[0].trim();
-    } else {
-      ign = ign.split(" ")[0].trim();
-    }
+    const ign = appeal.ign || appeal.title.split("'s")[0].trim();
 
     const embed = new EmbedBuilder()
       .setColor(0x3B82F6)
@@ -705,10 +657,8 @@ async function handleNewAppeal(appeal) {
 
     if (channel) {
       await channel.send({ embeds: [embed] });
-      console.log("✅ Appeal embed sent to Discord");
     }
 
-    // Send FULL data to Minecraft
     broadcast({
       type: "appeal_opened",
       appealer: ign,
