@@ -15,6 +15,8 @@ const STAFF_CHAT_EMBED_COLOR = 0xF59E0B; // orange
 const STAFF_CHAT_ICON = "https://cdn.discordapp.com/attachments/1309957290673180823/1472237167446065284/ILlogo.png";
 const PUBLIC_STAFF_CHAT_CHANNEL = "1472239592575860808";
 const PUBLIC_PUNISH_CHANNEL = "1472239487646961684";
+const LEADERBOARD_CHANNEL_ID = "1473096005221093567";
+let leaderboardMessageId = null;
 let reasonStats = {};
 // ================= HOURLY TRACKING =================
 let currentHourCount = 0;
@@ -88,6 +90,7 @@ client.once("clientReady", async () => {
   // ✅ Rebuild stats normally
   await backfillHistory();
   loadRiskData();
+  await updateLeaderboardEmbed();
   // ============================================
 // ✅ Skeppycat Baseline Adjustment (PERMANENT FIX)
 // ============================================
@@ -285,6 +288,8 @@ if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
     replayBuffer.push(ev);
     if (replayBuffer.length > MAX_REPLAY) replayBuffer.shift();
 
+    updateLeaderboardEmbed();
+    
     await msg.delete().catch(() => {});
     return;
   }
@@ -828,6 +833,68 @@ if (player && baseType) {
 
   saveRiskData();
 }
+}
+
+async function updateLeaderboardEmbed() {
+  try {
+    const channel = await client.channels.fetch(LEADERBOARD_CHANNEL_ID);
+    if (!channel) return;
+
+    const top = Object.values(staffStats)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+
+    const description = top.length === 0
+      ? "No punishment data yet."
+      : top.map((s, index) => {
+          const medal =
+            index === 0 ? "🥇" :
+            index === 1 ? "🥈" :
+            index === 2 ? "🥉" :
+            `\`${index + 1}.\``;
+
+          return `${medal} **${s.staff}** — ${s.total} total`;
+        }).join("\n");
+
+    const embed = new EmbedBuilder()
+      .setColor(0x3B82F6)
+      .setTitle("🏆 Punishment Leaderboard")
+      .setDescription(description)
+      .addFields(
+        {
+          name: "Last Updated",
+          value: `<t:${Math.floor(Date.now() / 1000)}:R>`,
+          inline: false
+        }
+      )
+      .setFooter({
+        text: "InvadedLands Moderation Analytics",
+        iconURL: STAFF_CHAT_ICON
+      })
+      .setTimestamp();
+
+    if (!leaderboardMessageId) {
+      const messages = await channel.messages.fetch({ limit: 10 });
+      const existing = messages.find(m => 
+        m.embeds.length &&
+        m.embeds[0].title === "🏆 Punishment Leaderboard"
+      );
+
+      if (existing) {
+        leaderboardMessageId = existing.id;
+        await existing.edit({ embeds: [embed] });
+      } else {
+        const msg = await channel.send({ embeds: [embed] });
+        leaderboardMessageId = msg.id;
+      }
+    } else {
+      const msg = await channel.messages.fetch(leaderboardMessageId);
+      if (msg) await msg.edit({ embeds: [embed] });
+    }
+
+  } catch (err) {
+    console.error("❌ Failed to update leaderboard embed:", err);
+  }
 }
 
 // ================= TOP OF HOUR TREND SYSTEM =================
