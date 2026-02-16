@@ -17,6 +17,7 @@ let reasonStats = {};
 let currentHourCount = 0;
 let previousHourCount = 0;
 let lastHourTimestamp = Date.now();
+let playerRisk = {};
 // ================= LEGACY TOTALS =================
 
 
@@ -375,22 +376,9 @@ if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
   broadcast(parseEvent(msg.content));
 });
 
-let browser;
-let page;
-
-async function initBrowser() {
-  if (browser) return;
-
-  browser = await chromium.launch({
-    headless: true
-  });
-
-  const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
-  });
-
-  page = await context.newPage();
+function getMinutesIntoHour() {
+  const now = new Date();
+  return now.getMinutes() + (now.getSeconds() / 60);
 }
 
 
@@ -410,6 +398,58 @@ app.get("/leaderboard", (req, res) => {
   );
 });
 
+app.get("/analytics/risk/:player", (req, res) => {
+
+  const player = req.params.player;
+
+  if (!playerRisk[player]) {
+    return res.json({
+      score: 0,
+      punishments: 0,
+      level: "LOW"
+    });
+  }
+
+  const score = playerRisk[player].score;
+  const punishments = playerRisk[player].punishments;
+
+  let level = "LOW";
+  if (score >= 5) level = "MEDIUM";
+  if (score >= 10) level = "HIGH";
+  if (score >= 20) level = "CRITICAL";
+
+  res.json({
+    score,
+    punishments,
+    level
+  });
+});
+
+app.get("/analytics/forecast", (req, res) => {
+
+  const minutesIntoHour = getMinutesIntoHour();
+
+  if (minutesIntoHour === 0) {
+    return res.json({
+      current: currentHourCount,
+      projected: currentHourCount,
+      confidence: "low"
+    });
+  }
+
+  const ratePerMinute = currentHourCount / minutesIntoHour;
+  const projected = Math.round(ratePerMinute * 60);
+
+  let confidence = "low";
+  if (minutesIntoHour > 15) confidence = "medium";
+  if (minutesIntoHour > 30) confidence = "high";
+
+  res.json({
+    current: currentHourCount,
+    projected,
+    confidence
+  });
+});
 
 
 app.get("/staff/:name", (req, res) => {
@@ -632,8 +672,9 @@ async function backfillHistory() {
 
 
 
-function applyPunishment(staff, typeRaw, reason) {
+function applyPunishment(staff, typeRaw, reason, player) {
 
+  // ================= STAFF STRUCTURE =================
   if (!staffStats[staff]) {
     staffStats[staff] = {
       staff,
@@ -648,11 +689,27 @@ function applyPunishment(staff, typeRaw, reason) {
 
   staffStats[staff].total++;
 
-  if (typeRaw.includes("ban")) staffStats[staff].bans++;
-  else if (typeRaw.includes("mute")) staffStats[staff].mutes++;
-  else if (typeRaw.includes("kick")) staffStats[staff].kicks++;
-  else if (typeRaw.includes("blacklist")) staffStats[staff].blacklists++;
+  // ================= TYPE TRACKING =================
+  let baseType = null;
 
+  if (typeRaw.includes("ban")) {
+    staffStats[staff].bans++;
+    baseType = "ban";
+  }
+  else if (typeRaw.includes("mute")) {
+    staffStats[staff].mutes++;
+    baseType = "mute";
+  }
+  else if (typeRaw.includes("kick")) {
+    staffStats[staff].kicks++;
+    baseType = "kick";
+  }
+  else if (typeRaw.includes("blacklist")) {
+    staffStats[staff].blacklists++;
+    baseType = "blacklist";
+  }
+
+  // ================= GLOBAL REASON STATS =================
   if (!reasonStats[reason]) {
     reasonStats[reason] = {
       total: 0,
@@ -665,16 +722,40 @@ function applyPunishment(staff, typeRaw, reason) {
 
   reasonStats[reason].total++;
 
-  if (typeRaw.includes("ban")) reasonStats[reason].bans++;
-  else if (typeRaw.includes("mute")) reasonStats[reason].mutes++;
-  else if (typeRaw.includes("kick")) reasonStats[reason].kicks++;
-  else if (typeRaw.includes("blacklist")) reasonStats[reason].blacklists++;
+  if (baseType === "ban") reasonStats[reason].bans++;
+  else if (baseType === "mute") reasonStats[reason].mutes++;
+  else if (baseType === "kick") reasonStats[reason].kicks++;
+  else if (baseType === "blacklist") reasonStats[reason].blacklists++;
 
+  // ================= STAFF REASON BREAKDOWN =================
   if (!staffStats[staff].reasons[reason]) {
     staffStats[staff].reasons[reason] = 0;
   }
 
   staffStats[staff].reasons[reason]++;
+
+  // ================= RISK SCORING SYSTEM =================
+  if (player && baseType) {
+
+    const severityMap = {
+      ban: 3,
+      mute: 2,
+      kick: 1,
+      blacklist: 4
+    };
+
+    const riskPoints = severityMap[baseType] || 1;
+
+    if (!playerRisk[player]) {
+      playerRisk[player] = {
+        score: 0,
+        punishments: 0
+      };
+    }
+
+    playerRisk[player].score += riskPoints;
+    playerRisk[player].punishments += 1;
+  }
 }
 // ================= HELPERS =================
 function broadcast(payload) {
