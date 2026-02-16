@@ -84,26 +84,13 @@ client.once("clientReady", async () => {
     status: "online"
   });
 
-  // ✅ Rebuild stats first
+  // ✅ Rebuild stats normally
   await backfillHistory();
 
-  // ============================================================
-  // 🔧 ONE-TIME TOTAL FIX FOR SKEPPYCAT (REMOVE AFTER REDEPLOY)
-  // ============================================================
-  const staff = "skeppycat";
-
-  if (staffStats[staff]) {
-    staffStats[staff].total = 289;
-    staffStats[staff].bans = 117;
-    staffStats[staff].mutes = 155;
-    staffStats[staff].kicks = 17;
-    staffStats[staff].blacklists = 0;
-
-    console.log("⚡ Applied one-time stat correction for skeppycat");
-  }
-  // ============================================================
-
+  // ✅ Start forum session
   await initForumSession();
+
+  // ✅ Check appeals every 20s
   setInterval(checkForNewAppeals, 20000);
 
   console.log("🚀 PunishCounter fully initialized");
