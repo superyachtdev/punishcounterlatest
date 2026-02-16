@@ -90,7 +90,26 @@ client.on("messageCreate", async msg => {
   if (msg.channel.id !== CHANNEL_ID) return;
   if (!msg.content) return;
 
- // ================= PUNISHMENTS =================
+ // ================= DISCORD → MC STAFF CHAT BRIDGE =================
+if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
+
+  // Ignore bot messages (including itself)
+  if (msg.author.bot) return;
+
+  const nickname = msg.member?.nickname || msg.author.username;
+  const content = msg.content?.trim();
+
+  if (!content) return;
+
+  broadcast({
+    type: "discord_chat",
+    nick: nickname,
+    message: content
+  });
+
+  return;
+}
+  // ================= PUNISHMENTS =================
 if (msg.content.startsWith("PUNISH|")) {
   const ev = parseEvent(msg.content);
   const reason = (ev.reason || "Unknown")
