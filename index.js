@@ -2,16 +2,8 @@ const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const express = require("express");
 const bodyParser = require("body-parser");
 const fetch = require("node-fetch");
-const { XMLParser } = require("fast-xml-parser");
-const { chromium } = require("playwright");
-const RSS_URL = "https://invadedlands.net/forums/ban-appeals.19/index.rss";
 
-let lastSeenGuid = null;
 
-const xmlParser = new XMLParser({
-  ignoreAttributes: false,
-  removeNSPrefix: true
-});
 // ================= CONFIG =================
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = "1309957290673180823";
@@ -20,16 +12,12 @@ const STAFF_CHAT_EMBED_COLOR = 0xF59E0B; // orange
 const STAFF_CHAT_ICON = "https://cdn.discordapp.com/attachments/1309957290673180823/1472237167446065284/ILlogo.png";
 const PUBLIC_STAFF_CHAT_CHANNEL = "1472239592575860808";
 const PUBLIC_PUNISH_CHANNEL = "1472239487646961684";
-const APPEALS_CHANNEL = "1473002170344542364";
 let reasonStats = {};
 // ================= HOURLY TRACKING =================
 let currentHourCount = 0;
 let previousHourCount = 0;
 let lastHourTimestamp = Date.now();
 // ================= LEGACY TOTALS =================
-
-const FORUM_URL = "https://invadedlands.net/forums/ban-appeals.19/";
-let lastSeenAppeal = null;
 
 
 // ================= REPLAY / STAFF CHAT =================
@@ -98,8 +86,7 @@ client.once("clientReady", async () => {
 
   
  // Start RSS polling
-checkAppealsRSS(); // run immediately once
-setInterval(checkAppealsRSS, 20000);
+
   // ✅ Check appeals every 20s
 
   console.log("🚀 PunishCounter fully initialized");
@@ -379,62 +366,6 @@ async function initBrowser() {
   page = await context.newPage();
 }
 
-async function checkAppealsRSS() {
-  try {
-    console.log("🔄 Checking RSS...");
-
-    await initBrowser();
-
-    await page.goto(RSS_URL, {
-      waitUntil: "domcontentloaded",
-      timeout: 30000
-    });
-
-    const xml = await page.content();
-
-    if (!xml.includes("<rss")) {
-      console.log("❌ Cloudflare block detected");
-      return;
-    }
-
-    const parsed = xmlParser.parse(xml);
-
-    if (!parsed?.rss?.channel?.item) {
-      console.log("❌ RSS structure invalid");
-      return;
-    }
-
-    const items = parsed.rss.channel.item;
-    const newest = Array.isArray(items) ? items[0] : items;
-
-    if (!lastSeenGuid) {
-      lastSeenGuid = newest.guid;
-      console.log("🧠 Initial RSS loaded. Tracking:", lastSeenGuid);
-      return;
-    }
-
-    if (newest.guid === lastSeenGuid) {
-      console.log("🟢 No new appeals.");
-      return;
-    }
-
-    lastSeenGuid = newest.guid;
-
-    const ign =
-      newest.creator || newest.title.split("'s")[0].trim();
-
-    console.log("🚨 New appeal detected:", ign);
-
-    await handleNewAppeal({
-      title: newest.title,
-      link: newest.link,
-      ign
-    });
-
-  } catch (err) {
-    console.log("⚠️ RSS error:", err.message);
-  }
-}
 
 function formatReason(reason) {
   return reason
@@ -672,41 +603,7 @@ async function backfillHistory() {
 
 
 
-async function handleNewAppeal(appeal) {
-  try {
 
-    const ign = appeal.ign || appeal.title.split("'s")[0].trim();
-
-    const embed = new EmbedBuilder()
-      .setColor(0x3B82F6)
-      .setTitle("📩 New Ban Appeal")
-      .setDescription(
-        `**${ign}** just appealed on the forums.\n\n` +
-        `[Click here to handle the appeal](${appeal.link})`
-      )
-      .setFooter({
-        text: "Invaded Forums",
-        iconURL: STAFF_CHAT_ICON
-      })
-      .setTimestamp(new Date());
-
-    const channel = await client.channels.fetch(APPEALS_CHANNEL);
-
-    if (channel) {
-      await channel.send({ embeds: [embed] });
-    }
-
-    broadcast({
-      type: "appeal_opened",
-      appealer: ign,
-      link: appeal.link,
-      timestamp: Date.now()
-    });
-
-  } catch (err) {
-    console.log("❌ Error handling appeal:", err.message);
-  }
-}
 
 function applyPunishment(staff, typeRaw, reason) {
 
