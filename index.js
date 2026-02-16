@@ -2,6 +2,9 @@ const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const express = require("express");
 const bodyParser = require("body-parser");
 const fetch = require("node-fetch");
+const fs = require("fs");
+const RISK_FILE = "./risk_data.json";
+
 
 
 // ================= CONFIG =================
@@ -18,6 +21,7 @@ let currentHourCount = 0;
 let previousHourCount = 0;
 let lastHourTimestamp = Date.now();
 let playerRisk = {};
+let playerRiskEvents = {};
 // ================= LEGACY TOTALS =================
 
 
@@ -83,6 +87,7 @@ client.once("clientReady", async () => {
 
   // ✅ Rebuild stats normally
   await backfillHistory();
+  loadRiskData();
   // ============================================
 // ✅ Skeppycat Baseline Adjustment (PERMANENT FIX)
 // ============================================
@@ -376,6 +381,26 @@ if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
   broadcast(parseEvent(msg.content));
 });
 
+function loadRiskData() {
+  try {
+    if (fs.existsSync(RISK_FILE)) {
+      const raw = fs.readFileSync(RISK_FILE);
+      playerRiskEvents = JSON.parse(raw);
+      console.log("✅ Risk data loaded from disk.");
+    }
+  } catch (err) {
+    console.error("❌ Failed to load risk data:", err);
+  }
+}
+
+function saveRiskData() {
+  try {
+    fs.writeFileSync(RISK_FILE, JSON.stringify(playerRiskEvents, null, 2));
+  } catch (err) {
+    console.error("❌ Failed to save risk data:", err);
+  }
+}
+
 function getMinutesIntoHour() {
   const now = new Date();
   return now.getMinutes() + (now.getSeconds() / 60);
@@ -402,7 +427,7 @@ app.get("/analytics/risk/:player", (req, res) => {
 
   const player = req.params.player;
 
-  if (!playerRisk[player]) {
+  if (!playerRiskEvents[player] || !playerRiskEvents[player].length) {
     return res.json({
       percent: 0,
       punishments: 0,
@@ -410,10 +435,47 @@ app.get("/analytics/risk/:player", (req, res) => {
     });
   }
 
+  const now = Date.now();
+  const events = playerRiskEvents[player];
+
+  let totalScore = 0;
+
+  for (const ev of events) {
+
+    const ageMs = now - ev.time;
+    const daysOld = ageMs / (1000 * 60 * 60 * 24);
+
+    // Recency Multiplier
+    let recencyMultiplier = 1;
+
+    if (daysOld < 1) recencyMultiplier = 2.0;
+    else if (daysOld < 7) recencyMultiplier = 1.5;
+    else if (daysOld < 30) recencyMultiplier = 1.2;
+
+    // Time Decay (10% per 7 days)
+    let decayFactor = 1 - (daysOld * 0.014);
+    if (decayFactor < 0.4) decayFactor = 0.4;
+
+    const weighted = ev.points * recencyMultiplier * decayFactor;
+
+    totalScore += weighted;
+  }
+
+  const MAX_RISK_SCORE = 100;
+
+  let percent = (totalScore / MAX_RISK_SCORE) * 100;
+  if (percent > 100) percent = 100;
+
+  percent = Number(percent.toFixed(1));
+
+  let level = "LOW";
+  if (percent >= 76) level = "HIGH";
+  else if (percent >= 26) level = "MODERATE";
+
   res.json({
-    percent: playerRisk[player].percent,
-    punishments: playerRisk[player].punishments,
-    level: playerRisk[player].level
+    percent,
+    punishments: events.length,
+    level
   });
 });
 
@@ -728,7 +790,7 @@ function applyPunishment(staff, typeRaw, reason, player) {
 
   staffStats[staff].reasons[reason]++;
 
-  // ================= RISK SCORING SYSTEM =================
+  // ================= SMART RISK SYSTEM =================
 if (player && baseType) {
 
   const severityMap = {
@@ -738,45 +800,19 @@ if (player && baseType) {
     blacklist: 6
   };
 
-  const riskPoints = severityMap[baseType] || 1;
+  const basePoints = severityMap[baseType] || 1;
 
-  if (!playerRisk[player]) {
-    playerRisk[player] = {
-      rawScore: 0,
-      punishments: 0,
-      percent: 0,
-      level: "LOW"
-    };
+  if (!playerRiskEvents[player]) {
+    playerRiskEvents[player] = [];
   }
 
-  playerRisk[player].rawScore += riskPoints;
-  playerRisk[player].punishments += 1;
+  playerRiskEvents[player].push({
+    type: baseType,
+    points: basePoints,
+    time: Date.now()
+  });
 
-  const MAX_RISK_SCORE = 100;
-
-  let percent = (playerRisk[player].rawScore / MAX_RISK_SCORE) * 100;
-
-  if (percent > 100) percent = 100;
-
-  percent = Number(percent.toFixed(1));
-
-  let level = "LOW";
-  if (percent >= 76) level = "HIGH";
-  else if (percent >= 26) level = "MODERATE";
-
-  playerRisk[player].percent = percent;
-  playerRisk[player].level = level;
-  }
-}
-
-function parseEvent(content) {
-  const parts = content.split("|");
-  const data = { type: parts[0].toLowerCase() };
-  for (const p of parts.slice(1)) {
-    const i = p.indexOf("=");
-    if (i !== -1) data[p.slice(0, i)] = p.slice(i + 1);
-  }
-  return data;
+  saveRiskData();
 }
 
 // ================= TOP OF HOUR TREND SYSTEM =================
