@@ -78,29 +78,33 @@ client.once("clientReady", async () => {
     activities: [
       {
         name: "counting on Invaded",
-        type: 3 // Playing
+        type: 3
       }
     ],
     status: "online"
   });
 
+  // ✅ Rebuild stats first
   await backfillHistory();
-  // ================= TEMP OVERRIDE (REMOVE AFTER REDEPLOY) =================
-staffStats["skeppycat"] = {
-  staff: "skeppycat",
-  total: 289,
-  bans: 117,
-  mutes: 155,
-  kicks: 17,
-  blacklists: 0,
-  reasons: {}
-};
 
-console.log("⚡ Temporary override applied for skeppycat");
-// ========================================================================
+  // ============================================================
+  // 🔧 ONE-TIME TOTAL FIX FOR SKEPPYCAT (REMOVE AFTER REDEPLOY)
+  // ============================================================
+  const staff = "skeppycat";
+
+  if (staffStats[staff]) {
+    staffStats[staff].total = 289;
+    staffStats[staff].bans = 117;
+    staffStats[staff].mutes = 155;
+    staffStats[staff].kicks = 17;
+    staffStats[staff].blacklists = 0;
+
+    console.log("⚡ Applied one-time stat correction for skeppycat");
+  }
+  // ============================================================
+
   await initForumSession();
-
-setInterval(checkForNewAppeals, 20000); // every 20s
+  setInterval(checkForNewAppeals, 20000);
 
   console.log("🚀 PunishCounter fully initialized");
 });
