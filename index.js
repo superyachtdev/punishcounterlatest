@@ -369,42 +369,54 @@ async function checkAppealsRSS() {
 
     const parsed = xmlParser.parse(xml);
 
-    const items = parsed?.rss?.channel?.item;
+    // More defensive parsing
+    const channel = parsed?.rss?.channel;
+
+    if (!channel) {
+      console.log("❌ RSS channel missing");
+      return;
+    }
+
+    let items = channel.item;
 
     if (!items) {
-      console.log("❌ No RSS items found");
+      console.log("❌ No items in channel");
       return;
     }
 
-    const newest = Array.isArray(items) ? items[0] : items;
-
-    console.log("Newest GUID:", newest.guid);
-
-    if (!lastSeenGuid) {
-      console.log("📌 Setting baseline GUID:", newest.guid);
-      lastSeenGuid = newest.guid;
-      return;
+    if (!Array.isArray(items)) {
+      items = [items];
     }
 
-    if (newest.guid === lastSeenGuid) {
-      console.log("⏸ No new appeal.");
-      return;
+    console.log("✅ Found", items.length, "RSS items");
+
+    // 🔥 Instead of only checking newest,
+    // loop through ALL items and send ones we haven't seen
+
+    for (const item of items.reverse()) {
+
+      const guid = item.guid?.["#text"] || item.guid;
+
+      if (!guid) continue;
+
+      if (lastSeenGuid && guid <= lastSeenGuid) continue;
+
+      const title = item.title;
+      const link = item.link;
+      const creator = item["dc:creator"];
+
+      const ign = creator || title.split("'s")[0].trim();
+
+      console.log("🚨 Sending appeal:", ign);
+
+      await handleNewAppeal({
+        title,
+        link,
+        ign
+      });
+
+      lastSeenGuid = guid;
     }
-
-    console.log("🚨 New appeal detected!");
-    lastSeenGuid = newest.guid;
-
-    const title = newest.title;
-    const link = newest.link;
-    const creator = newest["dc:creator"];
-
-    let ign = creator || title.split("'s")[0].trim();
-
-    await handleNewAppeal({
-      title,
-      link,
-      ign
-    });
 
   } catch (err) {
     console.log("⚠️ RSS check error:", err.message);
