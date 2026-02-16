@@ -404,24 +404,16 @@ app.get("/analytics/risk/:player", (req, res) => {
 
   if (!playerRisk[player]) {
     return res.json({
-      score: 0,
+      percent: 0,
       punishments: 0,
       level: "LOW"
     });
   }
 
-  const score = playerRisk[player].score;
-  const punishments = playerRisk[player].punishments;
-
-  let level = "LOW";
-  if (score >= 5) level = "MEDIUM";
-  if (score >= 10) level = "HIGH";
-  if (score >= 20) level = "CRITICAL";
-
   res.json({
-    score,
-    punishments,
-    level
+    percent: playerRisk[player].percent,
+    punishments: playerRisk[player].punishments,
+    level: playerRisk[player].level
   });
 });
 
@@ -737,32 +729,43 @@ function applyPunishment(staff, typeRaw, reason, player) {
   staffStats[staff].reasons[reason]++;
 
   // ================= RISK SCORING SYSTEM =================
-  if (player && baseType) {
+if (player && baseType) {
 
-    const severityMap = {
-      ban: 3,
-      mute: 2,
-      kick: 1,
-      blacklist: 4
+  const severityMap = {
+    ban: 5,
+    mute: 2,
+    kick: 1,
+    blacklist: 6
+  };
+
+  const riskPoints = severityMap[baseType] || 1;
+
+  if (!playerRisk[player]) {
+    playerRisk[player] = {
+      rawScore: 0,
+      punishments: 0,
+      percent: 0,
+      level: "LOW"
     };
-
-    const riskPoints = severityMap[baseType] || 1;
-
-    if (!playerRisk[player]) {
-      playerRisk[player] = {
-        score: 0,
-        punishments: 0
-      };
-    }
-
-    playerRisk[player].score += riskPoints;
-    playerRisk[player].punishments += 1;
   }
-}
-// ================= HELPERS =================
-function broadcast(payload) {
-  for (const c of appealListeners) {
-    c.write(`data: ${JSON.stringify(payload)}\n\n`);
+
+  playerRisk[player].rawScore += riskPoints;
+  playerRisk[player].punishments += 1;
+
+  const MAX_RISK_SCORE = 100;
+
+  let percent = (playerRisk[player].rawScore / MAX_RISK_SCORE) * 100;
+
+  if (percent > 100) percent = 100;
+
+  percent = Number(percent.toFixed(1));
+
+  let level = "LOW";
+  if (percent >= 76) level = "HIGH";
+  else if (percent >= 26) level = "MODERATE";
+
+  playerRisk[player].percent = percent;
+  playerRisk[player].level = level;
   }
 }
 
