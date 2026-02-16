@@ -92,26 +92,40 @@ client.on("messageCreate", async msg => {
   if (!msg.content && !msg.embeds?.length) return;
 
   // =====================================================
-  // 1️⃣ DISCORD → MC STAFF CHAT BRIDGE (PUBLIC CHANNEL)
-  // =====================================================
-  if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
+// 1️⃣ DISCORD → MC STAFF CHAT BRIDGE (PUBLIC CHANNEL)
+// =====================================================
+if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
 
-    // Ignore bots (including itself)
-    if (msg.author.bot) return;
+  // Ignore bots (including itself)
+  if (msg.author.bot) return;
 
-    const nickname = msg.member?.nickname || msg.author.username;
-    const content = msg.content?.trim();
+  const nickname = msg.member?.nickname || msg.author.username;
+  const content = msg.content?.trim();
 
-    if (!content) return;
+  if (!content) return;
 
-    broadcast({
-      type: "discord_chat",
-      nick: nickname,
-      message: content
+  // Send to Minecraft clients
+  broadcast({
+    type: "discord_chat",
+    nick: nickname,
+    message: content
+  });
+
+  // ✅ Delivery confirmation
+  if (appealListeners.length > 0) {
+    await msg.reply({
+      content: "*message successfully sent to invadedlands.*",
+      allowedMentions: { repliedUser: false }
     });
-
-    return;
+  } else {
+    await msg.reply({
+      content: "*no invadedlands staff currently online.*",
+      allowedMentions: { repliedUser: false }
+    });
   }
+
+  return;
+}
 
   // =====================================================
   // 2️⃣ EVERYTHING BELOW ONLY RUNS IN RAW WEBHOOK CHANNEL
