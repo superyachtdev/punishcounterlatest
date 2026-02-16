@@ -91,33 +91,6 @@ client.once("clientReady", async () => {
   await backfillHistory();
   // ================= LEADERBOARD DISPLAY OFFSETS =================
 
-const REAL_BASELINES = {
-  skeppycat: {
-    total: 289,
-    bans: 117,
-    mutes: 155,
-    kicks: 17,
-    blacklists: 0
-  }
-};
-
-for (const staff in REAL_BASELINES) {
-
-  if (!staffStats[staff]) continue;
-
-  const real = REAL_BASELINES[staff];
-  const raw = staffStats[staff];
-
-  staffStats[staff].displayOffset = {
-    total: Math.max(real.total - raw.total, 0),
-    bans: Math.max(real.bans - raw.bans, 0),
-    mutes: Math.max(real.mutes - raw.mutes, 0),
-    kicks: Math.max(real.kicks - raw.kicks, 0),
-    blacklists: Math.max(real.blacklists - raw.blacklists, 0)
-  };
-
-  console.log(`📊 Display offsets locked for ${staff}`);
-}
   loadRiskData();
   await updateLeaderboardEmbed();
 
@@ -837,10 +810,7 @@ async function updateLeaderboardEmbed() {
     if (!channel) return;
 
     const top = Object.values(staffStats)
-      .sort((a, b) =>
-  (b.total + (b.displayOffset?.total || 0)) -
-  (a.total + (a.displayOffset?.total || 0))
-)
+    .sort((a, b) => b.total - a.total)
       .slice(0, 10);
 
     const description = top.length === 0
@@ -852,8 +822,7 @@ async function updateLeaderboardEmbed() {
             index === 2 ? "🥉" :
             `\`${index + 1}.\``;
 
-          const displayTotal = s.total + (s.displayOffset?.total || 0);
-return `${medal} **${s.staff}** — ${displayTotal} total`;
+          return `${medal} **${s.staff}** — ${s.total} total`;
         }).join("\n");
 
     const embed = new EmbedBuilder()
