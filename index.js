@@ -9,7 +9,8 @@ const RSS_URL = "https://punishcounterlatest-production.up.railway.app/appeals/r
 let lastSeenGuid = null;
 
 const xmlParser = new XMLParser({
-  ignoreAttributes: false
+  ignoreAttributes: false,
+  removeNSPrefix: true
 });
 // ================= CONFIG =================
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -369,54 +370,46 @@ async function checkAppealsRSS() {
 
     const parsed = xmlParser.parse(xml);
 
-    // More defensive parsing
-    const channel = parsed?.rss?.channel;
-
-    if (!channel) {
-      console.log("❌ RSS channel missing");
+    if (!parsed.rss || !parsed.rss.channel) {
+      console.log("❌ RSS structure invalid");
       return;
     }
 
-    let items = channel.item;
+    const items = parsed.rss.channel.item;
 
     if (!items) {
-      console.log("❌ No items in channel");
+      console.log("❌ No RSS items found");
       return;
     }
 
-    if (!Array.isArray(items)) {
-      items = [items];
+    const newest = Array.isArray(items) ? items[0] : items;
+
+    if (!lastSeenGuid) {
+      lastSeenGuid = newest.guid;
+      console.log("🧠 Initial RSS loaded. Tracking from:", lastSeenGuid);
+      return;
     }
 
-    console.log("✅ Found", items.length, "RSS items");
-
-    // 🔥 Instead of only checking newest,
-    // loop through ALL items and send ones we haven't seen
-
-    for (const item of items.reverse()) {
-
-      const guid = item.guid?.["#text"] || item.guid;
-
-      if (!guid) continue;
-
-      if (lastSeenGuid && guid <= lastSeenGuid) continue;
-
-      const title = item.title;
-      const link = item.link;
-      const creator = item["dc:creator"];
-
-      const ign = creator || title.split("'s")[0].trim();
-
-      console.log("🚨 Sending appeal:", ign);
-
-      await handleNewAppeal({
-        title,
-        link,
-        ign
-      });
-
-      lastSeenGuid = guid;
+    if (newest.guid === lastSeenGuid) {
+      console.log("🟢 No new appeals.");
+      return;
     }
+
+    lastSeenGuid = newest.guid;
+
+    const title = newest.title;
+    const link = newest.link;
+    const creator = newest.creator;
+
+    const ign = creator || title.split("'s")[0].trim();
+
+    console.log("🚨 New appeal detected:", ign);
+
+    await handleNewAppeal({
+      title,
+      link,
+      ign
+    });
 
   } catch (err) {
     console.log("⚠️ RSS check error:", err.message);
@@ -451,12 +444,16 @@ app.get("/appeals/rss", async (req, res) => {
       }
     );
 
-    const text = await response.text();
+    let text = await response.text();
 
-    res.setHeader("Content-Type", "application/xml");
+    // 🔥 Remove problematic content namespace blocks
+    text = text.replace(/<content:encoded>[\s\S]*?<\/content:encoded>/g, "");
+
+    res.setHeader("Content-Type", "text/xml");
     res.send(text);
 
   } catch (err) {
+    console.log("RSS proxy error:", err.message);
     res.status(500).send("RSS fetch failed");
   }
 });
