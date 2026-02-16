@@ -70,7 +70,6 @@ app.get("/appeals/stream", (req, res) => {
 client.once("clientReady", async () => {
   console.log(`✅ Discord bot logged in as ${client.user.tag}`);
 
-  // 🔥 Set bot presence
   client.user.setPresence({
     activities: [
       {
@@ -84,10 +83,31 @@ client.once("clientReady", async () => {
   // ✅ Rebuild stats normally
   await backfillHistory();
 
-  
- // Start RSS polling
+  // ============================================
+  // 🔥 HARD FIX: Skeppycat Totals Override
+  // ============================================
 
-  // ✅ Check appeals every 20s
+  const skeppy = "skeppycat";
+
+  if (!staffStats[skeppy]) {
+    staffStats[skeppy] = {
+      staff: skeppy,
+      total: 0,
+      bans: 0,
+      mutes: 0,
+      kicks: 0,
+      blacklists: 0,
+      reasons: {}
+    };
+  }
+
+  staffStats[skeppy].total = 289; // <-- SET CORRECT TOTAL
+  staffStats[skeppy].bans = 117;    // set correct values if needed
+  staffStats[skeppy].mutes = 155;
+  staffStats[skeppy].kicks = 17;
+  staffStats[skeppy].blacklists = 0;
+
+  console.log("🔧 Skeppycat totals manually corrected.");
 
   console.log("🚀 PunishCounter fully initialized");
 });
