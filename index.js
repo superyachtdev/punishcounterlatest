@@ -634,41 +634,64 @@ function parseEvent(content) {
   return data;
 }
 
-setInterval(() => {
-  const now = Date.now();
-  const oneHour = 60 * 60 * 1000;
+// ================= TOP OF HOUR TREND SYSTEM =================
+function scheduleTopOfHourBroadcast() {
 
-  if (now - lastHourTimestamp < oneHour) return;
-
-  let percentChange = 0;
-
-  if (previousHourCount > 0) {
-    percentChange =
-      ((currentHourCount - previousHourCount) / previousHourCount) * 100;
+  function getMsUntilNextHour() {
+    const now = new Date();
+    const nextHour = new Date(now);
+    nextHour.setMinutes(60);
+    nextHour.setSeconds(0);
+    nextHour.setMilliseconds(0);
+    return nextHour - now;
   }
 
-  percentChange = percentChange.toFixed(1);
+  function runHourlyBroadcast() {
 
-  let trend = "stable";
-  if (percentChange > 0) trend = "up";
-  if (percentChange < 0) trend = "down";
+    let percentChange = 0;
 
-  // Broadcast via SSE to all mod clients
-  broadcast({
-    type: "hourlytrend",
-    current: currentHourCount,
-    previous: previousHourCount,
-    percent: percentChange,
-    trend: trend
-  });
+    if (previousHourCount > 0) {
+      percentChange =
+        ((currentHourCount - previousHourCount) / previousHourCount) * 100;
+    }
 
-  // Shift window
-  previousHourCount = currentHourCount;
-  currentHourCount = 0;
-  lastHourTimestamp = now;
+    percentChange = percentChange.toFixed(1);
 
-}, 60 * 1000); // checks every minute
+    let trend = "stable";
+    if (percentChange > 0) trend = "up";
+    if (percentChange < 0) trend = "down";
 
+    broadcast({
+      type: "hourlytrend",
+      current: currentHourCount,
+      previous: previousHourCount,
+      percent: percentChange,
+      trend: trend
+    });
+
+    console.log("📊 Hourly trend broadcasted:", {
+      current: currentHourCount,
+      previous: previousHourCount,
+      percent: percentChange,
+      trend
+    });
+
+    // Shift window
+    previousHourCount = currentHourCount;
+    currentHourCount = 0;
+
+    // Schedule next exact hour
+    setTimeout(runHourlyBroadcast, 60 * 60 * 1000);
+  }
+
+  const delay = getMsUntilNextHour();
+  console.log(`⏳ First hourly trend scheduled in ${Math.round(delay / 1000)}s`);
+
+  setTimeout(runHourlyBroadcast, delay);
+}
+
+// Start scheduler
+scheduleTopOfHourBroadcast();
 // ================= START =================
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🌐 Server running on ${PORT}`);
