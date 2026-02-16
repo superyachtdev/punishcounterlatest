@@ -87,209 +87,197 @@ client.login(DISCORD_TOKEN);
 
 // ================= DISCORD → MC =================
 client.on("messageCreate", async msg => {
+
+  // Ignore empty messages
+  if (!msg.content && !msg.embeds?.length) return;
+
+  // =====================================================
+  // 1️⃣ DISCORD → MC STAFF CHAT BRIDGE (PUBLIC CHANNEL)
+  // =====================================================
+  if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
+
+    // Ignore bots (including itself)
+    if (msg.author.bot) return;
+
+    const nickname = msg.member?.nickname || msg.author.username;
+    const content = msg.content?.trim();
+
+    if (!content) return;
+
+    broadcast({
+      type: "discord_chat",
+      nick: nickname,
+      message: content
+    });
+
+    return;
+  }
+
+  // =====================================================
+  // 2️⃣ EVERYTHING BELOW ONLY RUNS IN RAW WEBHOOK CHANNEL
+  // =====================================================
   if (msg.channel.id !== CHANNEL_ID) return;
-  if (!msg.content) return;
 
- // ================= DISCORD → MC STAFF CHAT BRIDGE =================
-if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
-
-  // Ignore bot messages (including itself)
-  if (msg.author.bot) return;
-
-  const nickname = msg.member?.nickname || msg.author.username;
-  const content = msg.content?.trim();
-
-  if (!content) return;
-
-  broadcast({
-    type: "discord_chat",
-    nick: nickname,
-    message: content
-  });
-
-  return;
-}
   // ================= PUNISHMENTS =================
-if (msg.content.startsWith("PUNISH|")) {
-  const ev = parseEvent(msg.content);
-  const reason = (ev.reason || "Unknown")
-  .replace(/#\d+/g, "")
-  .trim()
-  .toLowerCase();
-  if (!ev.staff) return;
+  if (msg.content.startsWith("PUNISH|")) {
 
-  const staff = ev.staff.toLowerCase();
+    const ev = parseEvent(msg.content);
+    const reason = (ev.reason || "Unknown")
+      .replace(/#\d+/g, "")
+      .trim()
+      .toLowerCase();
 
-  // Initialize if missing
-  if (!staffStats[staff]) {
-  staffStats[staff] = {
-    staff,
-    total: 0,
-    bans: 0,
-    mutes: 0,
-    kicks: 0,
-    blacklists: 0,
-    reasons: {}
-  };
-}
+    if (!ev.staff) return;
 
-  // Increment totals
-  staffStats[staff].total++;
-  currentHourCount++;
+    const staff = ev.staff.toLowerCase();
 
-  const typeRaw = (ev.type || "").toLowerCase();
+    if (!staffStats[staff]) {
+      staffStats[staff] = {
+        staff,
+        total: 0,
+        bans: 0,
+        mutes: 0,
+        kicks: 0,
+        blacklists: 0,
+        reasons: {}
+      };
+    }
 
-  if (typeRaw.includes("ban")) staffStats[staff].bans++;
-  else if (typeRaw.includes("mute")) staffStats[staff].mutes++;
-  else if (typeRaw.includes("kick")) staffStats[staff].kicks++;
-  else if (typeRaw.includes("blacklist")) staffStats[staff].blacklists++;
+    staffStats[staff].total++;
+    currentHourCount++;
 
-// ================= REASON TRACKING =================
-if (!reasonStats[reason]) {
-  reasonStats[reason] = {
-    total: 0,
-    bans: 0,
-    mutes: 0,
-    kicks: 0,
-    blacklists: 0
-  };
-}
+    const typeRaw = (ev.type || "").toLowerCase();
 
-reasonStats[reason].total++;
+    if (typeRaw.includes("ban")) staffStats[staff].bans++;
+    else if (typeRaw.includes("mute")) staffStats[staff].mutes++;
+    else if (typeRaw.includes("kick")) staffStats[staff].kicks++;
+    else if (typeRaw.includes("blacklist")) staffStats[staff].blacklists++;
 
-if (typeRaw.includes("ban")) reasonStats[reason].bans++;
-else if (typeRaw.includes("mute")) reasonStats[reason].mutes++;
-else if (typeRaw.includes("kick")) reasonStats[reason].kicks++;
-else if (typeRaw.includes("blacklist")) reasonStats[reason].blacklists++;
+    if (!reasonStats[reason]) {
+      reasonStats[reason] = {
+        total: 0,
+        bans: 0,
+        mutes: 0,
+        kicks: 0,
+        blacklists: 0
+      };
+    }
 
-// Track reason per staff
-if (!staffStats[staff].reasons[reason]) {
-  staffStats[staff].reasons[reason] = 0;
-}
-staffStats[staff].reasons[reason]++;
+    reasonStats[reason].total++;
 
-  // Determine past tense + correct counter
-  let pastTense = "punished";
-  let typeLabel = "Punishments";
-  let typeTotal = 0;
+    if (typeRaw.includes("ban")) reasonStats[reason].bans++;
+    else if (typeRaw.includes("mute")) reasonStats[reason].mutes++;
+    else if (typeRaw.includes("kick")) reasonStats[reason].kicks++;
+    else if (typeRaw.includes("blacklist")) reasonStats[reason].blacklists++;
 
-  if (typeRaw.includes("ban")) {
-    pastTense = "banned";
-    typeLabel = "Bans";
-    typeTotal = staffStats[staff].bans;
-  } 
-  else if (typeRaw.includes("mute")) {
-    pastTense = "muted";
-    typeLabel = "Mutes";
-    typeTotal = staffStats[staff].mutes;
-  } 
-  else if (typeRaw.includes("kick")) {
-    pastTense = "kicked";
-    typeLabel = "Kicks";
-    typeTotal = staffStats[staff].kicks;
-  } 
-  else if (typeRaw.includes("blacklist")) {
-    pastTense = "blacklisted";
-    typeLabel = "Blacklists";
-    typeTotal = staffStats[staff].blacklists;
+    if (!staffStats[staff].reasons[reason]) {
+      staffStats[staff].reasons[reason] = 0;
+    }
+
+    staffStats[staff].reasons[reason]++;
+
+    let pastTense = "punished";
+    let typeLabel = "Punishments";
+    let typeTotal = 0;
+
+    if (typeRaw.includes("ban")) {
+      pastTense = "banned";
+      typeLabel = "Bans";
+      typeTotal = staffStats[staff].bans;
+    } else if (typeRaw.includes("mute")) {
+      pastTense = "muted";
+      typeLabel = "Mutes";
+      typeTotal = staffStats[staff].mutes;
+    } else if (typeRaw.includes("kick")) {
+      pastTense = "kicked";
+      typeLabel = "Kicks";
+      typeTotal = staffStats[staff].kicks;
+    } else if (typeRaw.includes("blacklist")) {
+      pastTense = "blacklisted";
+      typeLabel = "Blacklists";
+      typeTotal = staffStats[staff].blacklists;
+    }
+
+    const player = ev.player || "Unknown Player";
+
+    let embedColor = 0xF59E0B;
+
+    if (typeRaw.includes("ban")) embedColor = 0xDC2626;
+    else if (typeRaw.includes("mute")) embedColor = 0xF59E0B;
+    else if (typeRaw.includes("kick")) embedColor = 0x16A34A;
+    else if (typeRaw.includes("blacklist")) embedColor = 0x000000;
+
+    const embed = new EmbedBuilder()
+      .setColor(embedColor)
+      .setTitle(ev.staff)
+      .setThumbnail(`https://minotar.net/helm/${ev.staff}/64.png`)
+      .setDescription(
+        `> ${ev.staff} just ${pastTense} **${player}** for **${formatReason(reason)}**.\n` +
+        `> They now have **${typeTotal} ${typeLabel}**.`
+      )
+      .setFooter({
+        text: "Punishment Logged",
+        iconURL: STAFF_CHAT_ICON
+      })
+      .setTimestamp();
+
+    const publicChannel = await client.channels.fetch(PUBLIC_PUNISH_CHANNEL);
+    if (publicChannel) {
+      await publicChannel.send({ embeds: [embed] });
+    }
+
+    replayBuffer.push(ev);
+    if (replayBuffer.length > MAX_REPLAY) replayBuffer.shift();
+
+    await msg.delete().catch(() => {});
+    return;
   }
 
-  const player = ev.player || "Unknown Player";
-
-  // ================= EMBED =================
-  // ================= EMBED COLOR BY TYPE =================
-let embedColor = 0xF59E0B; // default orange
-
-if (typeRaw.includes("ban")) {
-  embedColor = 0xDC2626; // red
-}
-else if (typeRaw.includes("mute")) {
-  embedColor = 0xF59E0B; // orange
-}
-else if (typeRaw.includes("kick")) {
-  embedColor = 0x16A34A; // green
-}
-else if (typeRaw.includes("blacklist")) {
-  embedColor = 0x000000; // black
-}
-
-// ================= EMBED =================
-const embed = new EmbedBuilder()
-  .setColor(embedColor)
-  .setTitle(ev.staff)
-  .setThumbnail(`https://minotar.net/helm/${ev.staff}/64.png`)
-  .setDescription(
-  `> ${ev.staff} just ${pastTense} **${player}** for **${formatReason(reason || "Unknown")}**.\n` +
-  `> They now have **${typeTotal} ${typeLabel}**.`
-)
-  .setFooter({
-    text: "Punishment Logged",
-    iconURL: STAFF_CHAT_ICON
-  })
-  .setTimestamp();
-
-  const publicChannel = await client.channels.fetch(PUBLIC_PUNISH_CHANNEL);
-if (publicChannel) {
-  await publicChannel.send({ embeds: [embed] });
-}
-
-  // Store replay
-  replayBuffer.push(ev);
-  if (replayBuffer.length > MAX_REPLAY) replayBuffer.shift();
-
-  // Delete raw webhook line
-  await msg.delete().catch(() => {});
-
-  return;
-}
-  // ================= STAFF CHAT =================
+  // ================= STAFF CHAT (FROM MC) =================
   if (msg.content.startsWith("STAFF_CHAT|")) {
-  const ev = parseEvent(msg.content);
-  if (!ev.staff || !ev.msg) return;
 
-  // ❌ Ignore filtered staff messages
-  if (ev.msg.includes("[Filtered]")) return;
+    const ev = parseEvent(msg.content);
+    if (!ev.staff || !ev.msg) return;
 
-  // Prevent duplicate echoes
-  const key = ev.staff + "|" + ev.msg;
-  if (staffChatSeen.has(key)) return;
-  staffChatSeen.add(key);
+    if (ev.msg.includes("[Filtered]")) return;
 
-  staffChatBuffer.push({
-    staff: ev.staff,
-    msg: ev.msg,
-    time: Number(ev.time) || Date.now() / 1000
-  });
+    const key = ev.staff + "|" + ev.msg;
+    if (staffChatSeen.has(key)) return;
+    staffChatSeen.add(key);
 
-  if (staffChatBuffer.length > STAFF_CHAT_MAX) {
-    staffChatBuffer.shift();
+    staffChatBuffer.push({
+      staff: ev.staff,
+      msg: ev.msg,
+      time: Number(ev.time) || Date.now() / 1000
+    });
+
+    if (staffChatBuffer.length > STAFF_CHAT_MAX) {
+      staffChatBuffer.shift();
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(STAFF_CHAT_EMBED_COLOR)
+      .setTitle(ev.staff)
+      .setThumbnail(`https://minotar.net/helm/${ev.staff}/64.png`)
+      .setDescription(`> ${ev.msg}`)
+      .setFooter({
+        text: "Staff Chat",
+        iconURL: STAFF_CHAT_ICON
+      })
+      .setTimestamp(new Date((Number(ev.time) || Date.now() / 1000) * 1000));
+
+    const publicChannel = await client.channels.fetch(PUBLIC_STAFF_CHAT_CHANNEL);
+    if (publicChannel) {
+      await publicChannel.send({ embeds: [embed] });
+    }
+
+    await msg.delete().catch(() => {});
+    return;
   }
-
-  const embed = new EmbedBuilder()
-  .setColor(STAFF_CHAT_EMBED_COLOR) // Discord blurple
-  .setTitle(ev.staff)
-  .setThumbnail(`https://minotar.net/helm/${ev.staff}/64.png`)
-  .setDescription(`> ${ev.msg}`)
-  .setFooter({
-    text: "Staff Chat",
-    iconURL: STAFF_CHAT_ICON // optional subtle icon
-  })
-  .setTimestamp(
-    new Date((Number(ev.time) || Date.now() / 1000) * 1000)
-  );
-
-const publicChannel = await client.channels.fetch(PUBLIC_STAFF_CHAT_CHANNEL);
-if (publicChannel) {
-  await publicChannel.send({ embeds: [embed] });
-}
-
-  await msg.delete().catch(() => {});
-  return;
-}
-
 
   // ================= SCHISTORY =================
   if (msg.content.startsWith("SCHISTORY_REQUEST|")) {
+
     const req = parseEvent(msg.content);
 
     const windowMap = { "5m": 300, "10m": 600, "30m": 1800, "1h": 3600 };
@@ -313,6 +301,7 @@ if (publicChannel) {
 
   // ================= REPLAY =================
   if (msg.content.startsWith("REPLAY_REQUEST|")) {
+
     const req = parseEvent(msg.content);
     const count = Math.min(parseInt(req.count || 5), replayBuffer.length);
 
