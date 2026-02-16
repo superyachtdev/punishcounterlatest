@@ -9,13 +9,19 @@ const STAFF_CHAT_EMBED_COLOR = 0xF59E0B; // orange
 const STAFF_CHAT_ICON = "https://cdn.discordapp.com/attachments/1309957290673180823/1472237167446065284/ILlogo.png";
 const PUBLIC_STAFF_CHAT_CHANNEL = "1472239592575860808";
 const PUBLIC_PUNISH_CHANNEL = "1472239487646961684";
+const APPEALS_CHANNEL = "1473002170344542364";
 let reasonStats = {};
 // ================= HOURLY TRACKING =================
 let currentHourCount = 0;
 let previousHourCount = 0;
 let lastHourTimestamp = Date.now();
 // ================= LEGACY TOTALS =================
+const { chromium } = require("playwright");
 
+const FORUM_URL = "https://invadedlands.net/forums/ban-appeals.19/";
+let lastSeenAppeal = null;
+let forumBrowser = null;
+let forumPage = null;
 
 // ================= REPLAY / STAFF CHAT =================
 const MAX_REPLAY = 50;
@@ -79,6 +85,22 @@ client.once("clientReady", async () => {
   });
 
   await backfillHistory();
+  // ================= TEMP OVERRIDE (REMOVE AFTER REDEPLOY) =================
+staffStats["skeppycat"] = {
+  staff: "skeppycat",
+  total: 289,
+  bans: 117,
+  mutes: 155,
+  kicks: 17,
+  blacklists: 0,
+  reasons: {}
+};
+
+console.log("⚡ Temporary override applied for skeppycat");
+// ========================================================================
+  await initForumSession();
+
+setInterval(checkForNewAppeals, 20000); // every 20s
 
   console.log("🚀 PunishCounter fully initialized");
 });
@@ -571,6 +593,118 @@ async function backfillHistory() {
   }
 
   console.log("✅ Backfill complete (raw + embed merged)");
+}
+
+async function initForumSession() {
+
+  console.log("🌐 Launching browser...");
+
+  forumBrowser = await chromium.launch({
+    headless: true
+  });
+
+  const context = await forumBrowser.newContext({
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+  });
+
+  forumPage = await context.newPage();
+
+  console.log("🔐 Logging into forum...");
+
+  await forumPage.goto("https://invadedlands.net/login", { waitUntil: "domcontentloaded" });
+
+  await forumPage.fill('input[name="login"]', process.env.FORUM_EMAIL);
+  await forumPage.fill('input[name="password"]', process.env.FORUM_PASSWORD);
+
+  await forumPage.click('button[type="submit"]');
+
+  await forumPage.waitForTimeout(5000);
+
+  console.log("✅ Logged in.");
+}
+
+async function checkForNewAppeals() {
+  try {
+
+    await forumPage.goto(FORUM_URL, { waitUntil: "domcontentloaded" });
+    await forumPage.waitForTimeout(3000);
+
+    const appeals = await forumPage.$$eval(
+      ".structItem--thread",
+      rows => rows.map(r => {
+        const title = r.querySelector(".structItem-title a")?.innerText || "";
+        const link = r.querySelector(".structItem-title a")?.href || "";
+        return { title, link };
+      })
+    );
+
+    if (!appeals.length) return;
+
+    const newest = appeals[0];
+
+    if (!lastSeenAppeal) {
+      lastSeenAppeal = newest.link;
+      return;
+    }
+
+    if (newest.link !== lastSeenAppeal) {
+
+      lastSeenAppeal = newest.link;
+
+      console.log("🚨 New appeal detected:", newest.title);
+
+      await handleNewAppeal(newest);
+    }
+
+  } catch (err) {
+    console.log("⚠️ Appeal check error:", err.message);
+  }
+}
+
+async function handleNewAppeal(appeal) {
+  try {
+
+    // Extract IGN properly (remove "'s Ban Appeal...")
+    let ign = appeal.title;
+
+    if (ign.includes("'s")) {
+      ign = ign.split("'s")[0].trim();
+    } else {
+      ign = ign.split(" ")[0].trim();
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0x3B82F6)
+      .setTitle("📩 New Ban Appeal")
+      .setDescription(
+        `**${ign}** just appealed on the forums.\n\n` +
+        `[Click here to handle the appeal](${appeal.link})`
+      )
+      .setFooter({
+        text: "Invaded Forums",
+        iconURL: STAFF_CHAT_ICON
+      })
+      .setTimestamp(new Date());
+
+    const channel = await client.channels.fetch(APPEALS_CHANNEL);
+
+    if (channel) {
+      await channel.send({ embeds: [embed] });
+      console.log("✅ Appeal embed sent to Discord");
+    }
+
+    // Send FULL data to Minecraft
+    broadcast({
+      type: "appeal_opened",
+      appealer: ign,
+      link: appeal.link,
+      timestamp: Date.now()
+    });
+
+  } catch (err) {
+    console.log("❌ Error handling appeal:", err.message);
+  }
 }
 
 function applyPunishment(staff, typeRaw, reason) {
