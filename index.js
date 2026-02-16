@@ -4,7 +4,7 @@ const bodyParser = require("body-parser");
 const fetch = require("node-fetch");
 const { XMLParser } = require("fast-xml-parser");
 
-const RSS_URL = "https://invadedlands.net/forums/ban-appeals.19/index.rss";
+const RSS_URL = "https://punishcounterlatest-production.up.railway.app/appeals/rss";
 
 let lastSeenGuid = null;
 
@@ -437,6 +437,28 @@ app.get("/leaderboard", (req, res) => {
       .sort((a, b) => b.total - a.total)
       .slice(0, 10)
   );
+});
+
+app.get("/appeals/rss", async (req, res) => {
+  try {
+    const response = await fetch(
+      "https://invadedlands.net/forums/ban-appeals.19/index.rss",
+      {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+        }
+      }
+    );
+
+    const text = await response.text();
+
+    res.setHeader("Content-Type", "application/xml");
+    res.send(text);
+
+  } catch (err) {
+    res.status(500).send("RSS fetch failed");
+  }
 });
 
 app.get("/staff/:name", (req, res) => {
