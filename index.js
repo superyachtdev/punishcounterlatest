@@ -621,6 +621,20 @@ app.get("/analytics/modhealth", (req, res) => {
   });
 });
 
+
+function parseEvent(content) {
+const parts = content.split("|");
+const data = { type: parts[0].toLowerCase() };
+
+for (const p of parts.slice(1)) {
+const i = p.indexOf("=");
+if (i !== -1) {
+data[p.slice(0, i)] = p.slice(i + 1);
+}
+}
+
+return data;
+}
 ////raaaatttatata
 // ================= BACKFILL =================
 async function backfillHistory() {
