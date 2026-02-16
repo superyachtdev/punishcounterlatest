@@ -289,7 +289,7 @@ if (msg.channel.id === PUBLIC_STAFF_CHAT_CHANNEL) {
     if (replayBuffer.length > MAX_REPLAY) replayBuffer.shift();
 
     updateLeaderboardEmbed();
-    
+
     await msg.delete().catch(() => {});
     return;
   }
@@ -868,7 +868,7 @@ async function updateLeaderboardEmbed() {
         }
       )
       .setFooter({
-        text: "InvadedLands Moderation Analytics",
+        text: "Punishments Leaderboard",
         iconURL: STAFF_CHAT_ICON
       })
       .setTimestamp();
