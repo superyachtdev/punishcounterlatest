@@ -89,41 +89,24 @@ client.once("clientReady", async () => {
 
   // ✅ Rebuild stats normally
   await backfillHistory();
+  // ================= LEADERBOARD DISPLAY OFFSETS =================
+
+const REAL_BASELINES = {
+  skeppycat: 289
+};
+
+for (const staff in REAL_BASELINES) {
+  if (staffStats[staff]) {
+    const discordTotal = staffStats[staff].total;
+    const realTotal = REAL_BASELINES[staff];
+
+    staffStats[staff].displayOffset = realTotal - discordTotal;
+
+    console.log(`📊 Leaderboard offset set for ${staff}: +${staffStats[staff].displayOffset}`);
+  }
+}
   loadRiskData();
   await updateLeaderboardEmbed();
-  // ============================================
-// ✅ Skeppycat Baseline Adjustment (PERMANENT FIX)
-// ============================================
-
-const skeppy = "skeppycat";
-
-// These are the REAL correct totals
-const REAL_TOTAL = 289;
-const REAL_BANS = 117;
-const REAL_MUTES = 155;
-const REAL_KICKS = 17;
-const REAL_BLACKLISTS = 0;
-
-if (staffStats[skeppy]) {
-
-  const offsetTotal = REAL_TOTAL - staffStats[skeppy].total;
-  const offsetBans = REAL_BANS - staffStats[skeppy].bans;
-  const offsetMutes = REAL_MUTES - staffStats[skeppy].mutes;
-  const offsetKicks = REAL_KICKS - staffStats[skeppy].kicks;
-  const offsetBlacklists = REAL_BLACKLISTS - staffStats[skeppy].blacklists;
-
-  staffStats[skeppy].total += offsetTotal;
-  staffStats[skeppy].bans += offsetBans;
-  staffStats[skeppy].mutes += offsetMutes;
-  staffStats[skeppy].kicks += offsetKicks;
-  staffStats[skeppy].blacklists += offsetBlacklists;
-
-  console.log("✅ Skeppycat baseline offset applied.");
-}
-  // ============================================
-  // 🔥 HARD FIX: Skeppycat Totals Override
-  // ============================================
-
 
   console.log("🚀 PunishCounter fully initialized");
 });
@@ -841,7 +824,10 @@ async function updateLeaderboardEmbed() {
     if (!channel) return;
 
     const top = Object.values(staffStats)
-      .sort((a, b) => b.total - a.total)
+      .sort((a, b) =>
+  (b.total + (b.displayOffset || 0)) -
+  (a.total + (a.displayOffset || 0))
+)
       .slice(0, 10);
 
     const description = top.length === 0
@@ -853,7 +839,8 @@ async function updateLeaderboardEmbed() {
             index === 2 ? "🥉" :
             `\`${index + 1}.\``;
 
-          return `${medal} **${s.staff}** — ${s.total} total`;
+          const displayTotal = s.total + (s.displayOffset || 0);
+return `${medal} **${s.staff}** — ${displayTotal} total`;
         }).join("\n");
 
     const embed = new EmbedBuilder()
