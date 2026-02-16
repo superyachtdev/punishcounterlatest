@@ -10,6 +10,10 @@ const STAFF_CHAT_ICON = "https://cdn.discordapp.com/attachments/1309957290673180
 const PUBLIC_STAFF_CHAT_CHANNEL = "1472239592575860808";
 const PUBLIC_PUNISH_CHANNEL = "1472239487646961684";
 let reasonStats = {};
+// ================= HOURLY TRACKING =================
+let currentHourCount = 0;
+let previousHourCount = 0;
+let lastHourTimestamp = Date.now();
 // ================= LEGACY TOTALS =================
 
 
@@ -112,6 +116,7 @@ if (msg.content.startsWith("PUNISH|")) {
 
   // Increment totals
   staffStats[staff].total++;
+  currentHourCount++;
 
   const typeRaw = (ev.type || "").toLowerCase();
 
@@ -606,6 +611,41 @@ function parseEvent(content) {
   }
   return data;
 }
+
+setInterval(() => {
+  const now = Date.now();
+  const oneHour = 60 * 60 * 1000;
+
+  if (now - lastHourTimestamp < oneHour) return;
+
+  let percentChange = 0;
+
+  if (previousHourCount > 0) {
+    percentChange =
+      ((currentHourCount - previousHourCount) / previousHourCount) * 100;
+  }
+
+  percentChange = percentChange.toFixed(1);
+
+  let trend = "stable";
+  if (percentChange > 0) trend = "up";
+  if (percentChange < 0) trend = "down";
+
+  // Broadcast via SSE to all mod clients
+  broadcast({
+    type: "hourlytrend",
+    current: currentHourCount,
+    previous: previousHourCount,
+    percent: percentChange,
+    trend: trend
+  });
+
+  // Shift window
+  previousHourCount = currentHourCount;
+  currentHourCount = 0;
+  lastHourTimestamp = now;
+
+}, 60 * 1000); // checks every minute
 
 // ================= START =================
 app.listen(PORT, "0.0.0.0", () => {
