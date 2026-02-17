@@ -80,7 +80,7 @@ client.once("clientReady", async () => {
   client.user.setPresence({
     activities: [
       {
-        name: "counting on Invaded",
+        name: "Watching over Invaded",
         type: 3
       }
     ],
@@ -94,7 +94,7 @@ client.once("clientReady", async () => {
   loadRiskData();
   await updateLeaderboardEmbed();
 
-  console.log("🚀 PunishCounter fully initialized");
+  console.log("🚀 Watchtowe fully initialized");
 });
 
 client.login(DISCORD_TOKEN);
@@ -837,7 +837,7 @@ async function updateLeaderboardEmbed() {
         }
       )
       .setFooter({
-        text: "PunishCounter",
+        text: "Watchtower",
         iconURL: STAFF_CHAT_ICON
       })
       .setTimestamp();
