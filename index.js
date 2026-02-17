@@ -57,6 +57,18 @@ app.use(bodyParser.json());
 
 // ================= SSE =================
 let appealListeners = [];
+// ================= BROADCAST TO MC CLIENTS =================
+function broadcast(data) {
+  const payload = `data: ${JSON.stringify(data)}\n\n`;
+
+  appealListeners.forEach(res => {
+    try {
+      res.write(payload);
+    } catch (err) {
+      console.error("❌ SSE write failed:", err);
+    }
+  });
+}
 
 app.get("/appeals/stream", (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
