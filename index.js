@@ -837,7 +837,7 @@ async function updateLeaderboardEmbed() {
         }
       )
       .setFooter({
-        text: "Punishments Leaderboard",
+        text: "PunishCounter",
         iconURL: STAFF_CHAT_ICON
       })
       .setTimestamp();
